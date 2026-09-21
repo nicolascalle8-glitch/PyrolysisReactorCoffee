@@ -1,0 +1,26 @@
+# Entornos virtuales de Python
+.venv/
+venv/
+ENV/
+env/
+
+# Archivos compilados y caché de Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Archivos de MATLAB
+*.asv
+*.m~
+*.slxc
+slprj/
+
+# Sistema y logs
+*.log
+.DS_Store
+Thumbs.db
+
+# Configuración local de IDEs que no debe subirse
+.idea/
+*.suo
+*.user
