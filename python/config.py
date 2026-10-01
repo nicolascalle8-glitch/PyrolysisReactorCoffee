@@ -7,9 +7,7 @@ Basado en datos experimentales de laboratorio (GIEM - UdeA / EIA) y espectroscop
 
 import numpy as np
 
-# ==============================================================================
-# 1. PARÁMETROS GEOMÉTRICOS DEL REACTOR Y DE LA CANASTILLA
-# ==============================================================================
+
 class GeometryConfig:
     def __init__(
         self,
