@@ -27,3 +27,10 @@ Thumbs.db
 
 # Caché de pruebas
 .pytest_cache/
+
+# Configuración local de VS Code (la ruta del intérprete cambia entre Windows y Mac)
+.vscode/
+
+# Figuras que generan los scripts al correr (se regeneran; solo se suben las del documento)
+*.png
+!docs/figuras/*.png
