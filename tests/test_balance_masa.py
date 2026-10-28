@@ -43,6 +43,8 @@ CASOS_INTERACTIVO = {
     "baja_temperatura_300": dict(T_final=300.0),
     "rampa_lenta_5": dict(ramp_rate=5.0, T_final=350.0, soak_time=0.0),
     "muy_humedo_40": dict(w_H2O=0.40),
+    "rac_regimen_rapida": dict(regimen="rapida"),
+    "cinetica_original": dict(cinetica="original"),
 }
 
 

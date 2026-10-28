@@ -26,6 +26,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 
+sys.path.insert(0, os.path.join(root_dir, "python"))
+from kinetics_rac import CineticaRAC, REGIMENES
+
 R_UNIVERSAL = 8.31446  # J/(mol·K)
 
 def menu_configuracion():
@@ -52,8 +55,17 @@ def menu_configuracion():
     espesor_acero_mm = pedir_valor("6. Espesor del tubo de acero inoxidable (mm)", 2.5)
     L_bed_cm  = pedir_valor("7. Altura de la canastilla de café (cm)", 20.0)
     humedad   = pedir_valor("8. Humedad del café acondicionado (% peso)", 8.0)
+    cinetica  = pedir_valor("9. Cinética: rac (Ranzi-Anca-Couce, con fuentes) u original", 'rac', str).lower()
+    regimen   = 'lecho_fijo'
+    if cinetica == 'rac':
+        regimen = pedir_valor("10. Régimen: lecho_fijo (canastilla, rampa lenta) o rapida", 'lecho_fijo', str).lower()
+    if cinetica not in ('rac', 'original') or regimen not in REGIMENES:
+        print("  -> Opción no válida, se usa rac / lecho_fijo")
+        cinetica, regimen = 'rac', 'lecho_fijo'
 
     return {
+        'cinetica': cinetica,
+        'regimen': regimen,
         'ramp_rate': ramp_rate,
         'T_final': T_final,
         'soak_time': soak_time,
@@ -130,6 +142,16 @@ def ejecutar_simulacion(cfg, verbose=True):
     char    = np.full((Nr_bed, Nz), rho_char_0)
     water   = np.full((Nr_bed, Nz), rho_water_0)
 
+    # Cinética: 'rac' = esquema RAC 2017 + triglicéridos (python/kinetics_rac.py, con fuentes)
+    #           'original' = cinética calibrada anterior de este archivo (sin fuente, se deja para comparar)
+    cinetica = cfg.get('cinetica', 'rac')
+    kin_rac = None
+    if cinetica == 'rac':
+        kin_rac = CineticaRAC(cfg.get('regimen', 'lecho_fijo'))
+        especies = kin_rac.estado_inicial(rho_bio_0, forma=(Nr_bed, Nz))
+    elif cinetica != 'original':
+        raise ValueError(f"Cinética '{cinetica}' no válida. Opciones: 'rac', 'original'")
+
     M_init_total = np.sum((biomass + char + water) * dV_bed)
 
     time_hist = []
@@ -147,6 +169,7 @@ def ejecutar_simulacion(cfg, verbose=True):
     pct_gnc_hist = []
     pct_water_hist = []
     pct_water_remaining_hist = []
+    pct_agua_rxn_hist = []
     residual_mass_hist = []
 
     snapshots_T = []
@@ -156,7 +179,8 @@ def ejecutar_simulacion(cfg, verbose=True):
 
     cum_vol = 0.0
     cum_gnc = 0.0
-    cum_vap = 0.0
+    cum_vap = 0.0       # Humedad evaporada
+    cum_agua_rxn = 0.0  # Agua formada por las reacciones de pirólisis
 
     t = 0.0
     T_furnace = T_ini_K
@@ -186,7 +210,8 @@ def ejecutar_simulacion(cfg, verbose=True):
         pct_char_hist.append((M_char_curr / M_init_total) * 100.0)
         pct_volatiles_hist.append((cum_vol / M_init_total) * 100.0)
         pct_gnc_hist.append((cum_gnc / M_init_total) * 100.0)
-        pct_water_hist.append((cum_vap / M_init_total) * 100.0)
+        pct_water_hist.append(((cum_vap + cum_agua_rxn) / M_init_total) * 100.0)
+        pct_agua_rxn_hist.append((cum_agua_rxn / M_init_total) * 100.0)
         pct_water_remaining_hist.append((M_water_curr / M_init_total) * 100.0)
         residual_mass_hist.append(((M_bio_curr + M_char_curr + M_water_curr) / M_init_total) * 100.0)
 
@@ -196,6 +221,10 @@ def ejecutar_simulacion(cfg, verbose=True):
     if verbose:
         print(f"\nIniciando simulación con reactor de acero inox (R_ext = {R_ext*1000:.1f} mm, e = {e_inox*1000:.1f} mm)...")
     while t < t_final:
+        if (t - last_save) >= save_interval:
+            last_save = t
+            registrar()
+
         # Propiedades del lecho
         conv = np.clip(1.0 - (biomass + water) / (rho_bio_0 + rho_water_0), 0.0, 1.0)
         k_bed = (1.0 - conv) * (0.12 + 1.5e-4 * (T[:Nr_bed, :] - 298.15)) + conv * (0.08 + 2.0e-4 * (T[:Nr_bed, :] - 298.15))
@@ -219,25 +248,38 @@ def ejecutar_simulacion(cfg, verbose=True):
         # Cinética de pirólisis en el lecho
         T_bed_clip = np.maximum(T[:Nr_bed, :], 273.15)
         RT_bed = R_UNIVERSAL * T_bed_clip
-        k_c = A_char * np.exp(-Ea_char / RT_bed)
-        k_v = A_vol  * np.exp(-Ea_vol  / RT_bed)
-        k_g = A_gnc  * np.exp(-Ea_gnc  / RT_bed)
         k_w = np.where(T_bed_clip > 350.0, A_evap * np.exp(-Ea_evap / RT_bed), 0.0)
+        consumido_w = water * -np.expm1(-k_w * dt)
+        r_w = consumido_w / dt
 
         # Integración exacta de primer orden en el paso: se consume B*(1 - e^(-k*dt)) y se reparte entre
-        # productos según k_i/k. Nunca se consume más de lo que hay => la masa se conserva por construcción.
-        k_bio = k_c + k_v + k_g
-        consumido_bio = biomass * -np.expm1(-k_bio * dt)
-        consumido_w   = water * -np.expm1(-k_w * dt)
-        r_c_prim = consumido_bio * (k_c / k_bio) / dt
-        r_v_prim = consumido_bio * (k_v / k_bio) / dt
-        r_g_prim = consumido_bio * (k_g / k_bio) / dt
-        r_w      = consumido_w / dt
+        # productos. Nunca se consume más de lo que hay => la masa se conserva por construcción.
+        if kin_rac is not None:
+            q_pirolisis, liberado = kin_rac.paso(especies, T_bed_clip, dt)
+            q_rxn_bed = r_w * dH_evap + q_pirolisis
+            biomass = kin_rac.masa_original(especies)
+            char = kin_rac.masa_solida(especies) - biomass + rho_char_0
+            cum_vol += np.sum(liberado['bio_oil'] * dV_bed)
+            cum_gnc += np.sum(liberado['gas'] * dV_bed)
+            cum_agua_rxn += np.sum(liberado['agua_rxn'] * dV_bed)
+        else:
+            k_c = A_char * np.exp(-Ea_char / RT_bed)
+            k_v = A_vol  * np.exp(-Ea_vol  / RT_bed)
+            k_g = A_gnc  * np.exp(-Ea_gnc  / RT_bed)
+            k_bio = k_c + k_v + k_g
+            consumido_bio = biomass * -np.expm1(-k_bio * dt)
+            r_c_prim = consumido_bio * (k_c / k_bio) / dt
+            r_v_prim = consumido_bio * (k_v / k_bio) / dt
+            r_g_prim = consumido_bio * (k_g / k_bio) / dt
+            r_c_sec = factor_sec_char * r_v_prim
+            r_v_net = r_v_prim - r_c_sec
 
-        r_c_sec = factor_sec_char * r_v_prim
-        r_v_net = r_v_prim - r_c_sec
+            q_rxn_bed = r_w * dH_evap + r_c_prim * dH_char + r_v_prim * dH_vol + r_g_prim * dH_gnc
 
-        q_rxn_bed = r_w * dH_evap + r_c_prim * dH_char + r_v_prim * dH_vol + r_g_prim * dH_gnc
+            biomass = biomass - consumido_bio
+            char    = char + (r_c_prim + r_c_sec) * dt
+            cum_vol += np.sum(r_v_net * dV_bed) * dt
+            cum_gnc += np.sum(r_g_prim * dV_bed) * dt
 
         # Conducción en todo el dominio (Lecho + Acero)
         dT_dt = np.zeros_like(T)
@@ -278,19 +320,10 @@ def ejecutar_simulacion(cfg, verbose=True):
         term_rad_ext = k_inox * (d2T_dr2_ext + (1.0 / R_ext) * (q_horno / k_inox))
         dT_dt[-1, :] = (term_rad_ext + k_inox * d2T_dz2[-1, :]) / (rho_inox * cp_inox)
 
-        if (t - last_save) >= save_interval:
-            last_save = t
-            registrar()
-
-        # Integración
+        # Integración (las especies sólidas ya avanzaron en el bloque de cinética)
         T += dT_dt * dt
-        biomass = biomass - consumido_bio
-        char    = char + (r_c_prim + r_c_sec) * dt
-        water   = water - consumido_w
-
-        cum_vol += np.sum(r_v_net * dV_bed) * dt
-        cum_gnc += np.sum(r_g_prim * dV_bed) * dt
-        cum_vap += np.sum(r_w * dV_bed) * dt
+        water = water - consumido_w
+        cum_vap += np.sum(consumido_w * dV_bed)
 
         t += dt
         if not np.all(np.isfinite(T)):
@@ -318,6 +351,7 @@ def ejecutar_simulacion(cfg, verbose=True):
         'pct_gnc': np.array(pct_gnc_hist),
         'pct_water': np.array(pct_water_hist),
         'pct_water_remaining': np.array(pct_water_remaining_hist),
+        'pct_agua_rxn': np.array(pct_agua_rxn_hist),
         'residual_mass': np.array(residual_mass_hist),
         'dtg': dtg,
         'snapshots_T': snapshots_T,
@@ -509,7 +543,7 @@ if __name__ == "__main__":
     print(f"  • Biochar (sólido carbonoso):              {resultados['pct_char'][-1]:5.1f} %")
     print(f"  • Biovolátiles / Bio-oil (condensables):   {resultados['pct_vol'][-1]:5.1f} %")
     print(f"  • Gases No Condensables (GNC):             {resultados['pct_gnc'][-1]:5.1f} %")
-    print(f"  • Vapor de agua (humedad):                 {resultados['pct_water'][-1]:5.1f} %")
+    print(f"  • Agua (humedad + agua de reacción):       {resultados['pct_water'][-1]:5.1f} %")
     if resultados['pct_biomass'][-1] > 0.1:
         print(f"  • Biomasa sin reaccionar:                  {resultados['pct_biomass'][-1]:5.1f} %")
     if resultados['pct_water_remaining'][-1] > 0.1:
