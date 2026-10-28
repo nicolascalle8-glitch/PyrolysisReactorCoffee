@@ -24,3 +24,6 @@ Thumbs.db
 .idea/
 *.suo
 *.user
+
+# Caché de pruebas
+.pytest_cache/

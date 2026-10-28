@@ -64,7 +64,7 @@ def menu_configuracion():
         'w_H2O': humedad / 100.0
     }
 
-def ejecutar_simulacion(cfg):
+def ejecutar_simulacion(cfg, verbose=True):
     R_int = cfg['R_int']
     e_inox = cfg['e_inox']
     R_ext = R_int + e_inox
@@ -146,6 +146,7 @@ def ejecutar_simulacion(cfg):
     pct_volatiles_hist = []
     pct_gnc_hist = []
     pct_water_hist = []
+    pct_water_remaining_hist = []
     residual_mass_hist = []
 
     snapshots_T = []
@@ -159,25 +160,61 @@ def ejecutar_simulacion(cfg):
 
     t = 0.0
     T_furnace = T_ini_K
+    T_set = T_ini_K
     tau_stone = cfg['tau_stone']
+    h_comb = 90.0
+    dz2 = dz**2
+    alpha_inox = k_inox / (rho_inox * cp_inox)
+    r_in_bed = r_bed[1:-1, np.newaxis]               # radios de los nodos internos del lecho
+    r_in_inox = r_grid[Nr_bed:Nr_total - 1, np.newaxis]  # radios de los nodos internos del acero
+    mid_z = Nz // 2
 
-    print(f"\nIniciando simulación con reactor de acero inox (R_ext = {R_ext*1000:.1f} mm, e = {e_inox*1000:.1f} mm)...")
-    while t <= t_final:
-        # Horno con inercia de piedra refractaria
-        T_set = T_ini_K + beta_K_s * t if t <= t_ramp_end else T_fin_K
-        T_furnace += ((T_set - T_furnace) / max(tau_stone, 10.0)) * 0.4
+    def registrar():
+        time_hist.append(t / 60.0)
+        T_center_hist.append(T[0, mid_z] - 273.15)
+        T_mid_hist.append(T[Nr_bed // 2, mid_z] - 273.15)
+        T_bed_surf_hist.append(T[Nr_bed - 1, mid_z] - 273.15)
+        T_inox_ext_hist.append(T[-1, mid_z] - 273.15)
+        T_mean_bed_hist.append(np.mean(T[:Nr_bed, :]) - 273.15)
+        T_furnace_hist.append(T_furnace - 273.15)
+        T_set_hist.append(T_set - 273.15)
 
-        alpha_bed = 0.12 / (rho_bulk * 1500.0)
-        cfl_dt = 0.35 * (dr_bed**2) / alpha_bed
-        dt = min(0.3, cfl_dt, t_final - t if t_final > t else 0.3)
-        if dt <= 0:
-            break
+        M_bio_curr   = np.sum(biomass * dV_bed)
+        M_char_curr  = np.sum(char * dV_bed)
+        M_water_curr = np.sum(water * dV_bed)
+        pct_biomass_hist.append((M_bio_curr / M_init_total) * 100.0)
+        pct_char_hist.append((M_char_curr / M_init_total) * 100.0)
+        pct_volatiles_hist.append((cum_vol / M_init_total) * 100.0)
+        pct_gnc_hist.append((cum_gnc / M_init_total) * 100.0)
+        pct_water_hist.append((cum_vap / M_init_total) * 100.0)
+        pct_water_remaining_hist.append((M_water_curr / M_init_total) * 100.0)
+        residual_mass_hist.append(((M_bio_curr + M_char_curr + M_water_curr) / M_init_total) * 100.0)
 
+        snapshots_T.append(np.copy(T) - 273.15)
+        snapshot_times.append(t / 60.0)
+
+    if verbose:
+        print(f"\nIniciando simulación con reactor de acero inox (R_ext = {R_ext*1000:.1f} mm, e = {e_inox*1000:.1f} mm)...")
+    while t < t_final:
         # Propiedades del lecho
         conv = np.clip(1.0 - (biomass + water) / (rho_bio_0 + rho_water_0), 0.0, 1.0)
         k_bed = (1.0 - conv) * (0.12 + 1.5e-4 * (T[:Nr_bed, :] - 298.15)) + conv * (0.08 + 2.0e-4 * (T[:Nr_bed, :] - 298.15))
         cp_bed = (1.0 - conv) * (1250.0 + 1.8 * (T[:Nr_bed, :] - 273.15)) + conv * (720.0 + 2.2 * (T[:Nr_bed, :] - 273.15))
         rho_bed = np.maximum(biomass + char + water, 50.0)
+        R_contacto = (dr_bed / (2 * k_bed[-1, :])) + (dr_inox / (2 * k_inox)) + 0.003
+
+        # Paso de tiempo estable del esquema explícito: dt * (coeficiente diagonal) <= 1 en TODOS los nodos.
+        # El acero conduce ~20 veces más rápido que el café y sus nodos son más finos: es quien manda.
+        alpha_bed = k_bed / (rho_bed * cp_bed)
+        lam_bed = np.max(alpha_bed) * (4.0 / dr_bed**2 + 2.0 / dz2)
+        lam_int = np.max(alpha_bed[-1, :] * (2.0 / dr_bed**2 + 2.0 / dz2)
+                         + (2.0 / dr_bed + 1.0 / R_int) / (R_contacto * rho_bed[-1, :] * cp_bed[-1, :]))
+        lam_inox = alpha_inox * (2.0 / dr_inox**2 + 2.0 / dz2) + h_comb * (2.0 / dr_inox + 1.0 / R_ext) / (rho_inox * cp_inox)
+        dt = min(0.3, 0.9 / max(lam_bed, lam_int, lam_inox), t_final - t)
+
+        # Horno con inercia de piedra refractaria
+        T_set = T_ini_K + beta_K_s * t if t <= t_ramp_end else T_fin_K
+        T_furnace += ((T_set - T_furnace) / max(tau_stone, 10.0)) * dt
 
         # Cinética de pirólisis en el lecho
         T_bed_clip = np.maximum(T[:Nr_bed, :], 273.15)
@@ -187,101 +224,79 @@ def ejecutar_simulacion(cfg):
         k_g = A_gnc  * np.exp(-Ea_gnc  / RT_bed)
         k_w = np.where(T_bed_clip > 350.0, A_evap * np.exp(-Ea_evap / RT_bed), 0.0)
 
-        r_c_prim = k_c * np.maximum(biomass, 0.0)
-        r_v_prim = k_v * np.maximum(biomass, 0.0)
-        r_g_prim = k_g * np.maximum(biomass, 0.0)
-        r_w      = k_w * np.maximum(water, 0.0)
+        # Integración exacta de primer orden en el paso: se consume B*(1 - e^(-k*dt)) y se reparte entre
+        # productos según k_i/k. Nunca se consume más de lo que hay => la masa se conserva por construcción.
+        k_bio = k_c + k_v + k_g
+        consumido_bio = biomass * -np.expm1(-k_bio * dt)
+        consumido_w   = water * -np.expm1(-k_w * dt)
+        r_c_prim = consumido_bio * (k_c / k_bio) / dt
+        r_v_prim = consumido_bio * (k_v / k_bio) / dt
+        r_g_prim = consumido_bio * (k_g / k_bio) / dt
+        r_w      = consumido_w / dt
 
         r_c_sec = factor_sec_char * r_v_prim
         r_v_net = r_v_prim - r_c_sec
 
-        d_bio  = -(r_c_prim + r_v_prim + r_g_prim)
-        d_char = r_c_prim + r_c_sec
-        d_wat  = -r_w
         q_rxn_bed = r_w * dH_evap + r_c_prim * dH_char + r_v_prim * dH_vol + r_g_prim * dH_gnc
 
         # Conducción en todo el dominio (Lecho + Acero)
         dT_dt = np.zeros_like(T)
-        dz2 = dz**2
+        d2T_dz2 = np.zeros_like(T)
+        d2T_dz2[:, 1:-1] = (T[:, 2:] - 2*T[:, 1:-1] + T[:, :-2]) / dz2
 
         # A. Centro del lecho r = 0 (L'Hôpital)
         term_rad_center = 4.0 * k_bed[0, :] * (T[1, :] - T[0, :]) / (dr_bed**2)
-        d2T_dz2_center = np.zeros(Nz)
-        d2T_dz2_center[1:-1] = (T[0, 2:] - 2*T[0, 1:-1] + T[0, :-2]) / dz2
-        dT_dt[0, :] = (term_rad_center + k_bed[0, :] * d2T_dz2_center + q_rxn_bed[0, :]) / (rho_bed[0, :] * cp_bed[0, :])
+        dT_dt[0, :] = (term_rad_center + k_bed[0, :] * d2T_dz2[0, :] + q_rxn_bed[0, :]) / (rho_bed[0, :] * cp_bed[0, :])
 
         # B. Nodos internos del lecho (1 <= i <= Nr_bed - 2)
-        for i in range(1, Nr_bed - 1):
-            d2T_dr2 = (T[i+1, :] - 2*T[i, :] + T[i-1, :]) / (dr_bed**2)
-            dT_dr   = (T[i+1, :] - T[i-1, :]) / (2.0 * dr_bed)
-            d2T_dz2 = np.zeros(Nz)
-            d2T_dz2[1:-1] = (T[i, 2:] - 2*T[i, 1:-1] + T[i, :-2]) / dz2
-            term_rad = k_bed[i, :] * (d2T_dr2 + (1.0 / r_bed[i]) * dT_dr)
-            dT_dt[i, :] = (term_rad + k_bed[i, :] * d2T_dz2 + q_rxn_bed[i, :]) / (rho_bed[i, :] * cp_bed[i, :])
+        Tb = T[:Nr_bed, :]
+        d2T_dr2 = (Tb[2:] - 2*Tb[1:-1] + Tb[:-2]) / (dr_bed**2)
+        dT_dr   = (Tb[2:] - Tb[:-2]) / (2.0 * dr_bed)
+        term_rad = k_bed[1:-1] * (d2T_dr2 + dT_dr / r_in_bed)
+        dT_dt[1:Nr_bed - 1] = (term_rad + k_bed[1:-1] * d2T_dz2[1:Nr_bed - 1] + q_rxn_bed[1:-1]) / (rho_bed[1:-1] * cp_bed[1:-1])
 
         # C. Interfaz Lecho - Acero Inoxidable (i = Nr_bed - 1)
         idx_int = Nr_bed - 1
-        q_transf_int = (T[idx_int + 1, :] - T[idx_int, :]) / ((dr_bed / (2 * k_bed[-1, :])) + (dr_inox / (2 * k_inox)) + 0.003)
+        q_transf_int = (T[idx_int + 1, :] - T[idx_int, :]) / R_contacto
         d2T_dr2_int = 2.0 * (T[idx_int - 1, :] - T[idx_int, :] + (dr_bed * q_transf_int / k_bed[-1, :])) / (dr_bed**2)
         term_rad_int = k_bed[-1, :] * (d2T_dr2_int + (1.0 / R_int) * (q_transf_int / k_bed[-1, :]))
-        d2T_dz2_int = np.zeros(Nz)
-        d2T_dz2_int[1:-1] = (T[idx_int, 2:] - 2*T[idx_int, 1:-1] + T[idx_int, :-2]) / dz2
-        dT_dt[idx_int, :] = (term_rad_int + k_bed[-1, :] * d2T_dz2_int + q_rxn_bed[-1, :]) / (rho_bed[-1, :] * cp_bed[-1, :])
+        dT_dt[idx_int, :] = (term_rad_int + k_bed[-1, :] * d2T_dz2[idx_int, :] + q_rxn_bed[-1, :]) / (rho_bed[-1, :] * cp_bed[-1, :])
 
         # D. Nodos dentro del espesor del Acero Inoxidable
-        for i in range(Nr_bed, Nr_total - 1):
-            r_curr = r_grid[i]
-            d2T_dr2 = (T[i+1, :] - 2*T[i, :] + T[i-1, :]) / (dr_inox**2)
-            dT_dr   = (T[i+1, :] - T[i-1, :]) / (2.0 * dr_inox)
-            d2T_dz2 = np.zeros(Nz)
-            d2T_dz2[1:-1] = (T[i, 2:] - 2*T[i, 1:-1] + T[i, :-2]) / dz2
-            term_rad = k_inox * (d2T_dr2 + (1.0 / r_curr) * dT_dr)
-            dT_dt[i, :] = (term_rad + k_inox * d2T_dz2) / (rho_inox * cp_inox)
+        # El primer nodo de acero cede al café exactamente el mismo flujo q_transf_int que el café recibe
+        # (nodo fantasma interior), así la energía se conserva en la interfaz.
+        Ti = np.copy(T[Nr_bed - 1:, :])
+        Ti[0, :] = T[Nr_bed, :] - dr_inox * q_transf_int / k_inox
+        d2T_dr2 = (Ti[2:] - 2*Ti[1:-1] + Ti[:-2]) / (dr_inox**2)
+        dT_dr   = (Ti[2:] - Ti[:-2]) / (2.0 * dr_inox)
+        term_rad = k_inox * (d2T_dr2 + dT_dr / r_in_inox)
+        dT_dt[Nr_bed:Nr_total - 1] = (term_rad + k_inox * d2T_dz2[Nr_bed:Nr_total - 1]) / (rho_inox * cp_inox)
 
         # E. Cara externa del reactor de acero r = R_ext (Robin con horno)
-        h_comb = 90.0
         q_horno = h_comb * (T_furnace - T[-1, :])
         d2T_dr2_ext = 2.0 * (T[-2, :] - T[-1, :] + (dr_inox * q_horno / k_inox)) / (dr_inox**2)
         term_rad_ext = k_inox * (d2T_dr2_ext + (1.0 / R_ext) * (q_horno / k_inox))
-        d2T_dz2_ext = np.zeros(Nz)
-        d2T_dz2_ext[1:-1] = (T[-1, 2:] - 2*T[-1, 1:-1] + T[-1, :-2]) / dz2
-        dT_dt[-1, :] = (term_rad_ext + k_inox * d2T_dz2_ext) / (rho_inox * cp_inox)
+        dT_dt[-1, :] = (term_rad_ext + k_inox * d2T_dz2[-1, :]) / (rho_inox * cp_inox)
+
+        if (t - last_save) >= save_interval:
+            last_save = t
+            registrar()
 
         # Integración
         T += dT_dt * dt
-        biomass = np.maximum(biomass + d_bio * dt, 0.0)
-        char    = np.maximum(char + d_char * dt, 0.0)
-        water   = np.maximum(water + d_wat * dt, 0.0)
+        biomass = biomass - consumido_bio
+        char    = char + (r_c_prim + r_c_sec) * dt
+        water   = water - consumido_w
 
         cum_vol += np.sum(r_v_net * dV_bed) * dt
         cum_gnc += np.sum(r_g_prim * dV_bed) * dt
         cum_vap += np.sum(r_w * dV_bed) * dt
 
-        if (t - last_save) >= save_interval or t >= t_final:
-            last_save = t
-            time_hist.append(t / 60.0)
-            mid_z = Nz // 2
-            T_center_hist.append(T[0, mid_z] - 273.15)
-            T_mid_hist.append(T[Nr_bed // 2, mid_z] - 273.15)
-            T_bed_surf_hist.append(T[Nr_bed - 1, mid_z] - 273.15)
-            T_inox_ext_hist.append(T[-1, mid_z] - 273.15)
-            T_mean_bed_hist.append(np.mean(T[:Nr_bed, :]) - 273.15)
-            T_furnace_hist.append(T_furnace - 273.15)
-            T_set_hist.append(T_set - 273.15)
-
-            M_bio_curr  = np.sum(biomass * dV_bed)
-            M_char_curr = np.sum(char * dV_bed)
-            pct_biomass_hist.append((M_bio_curr / M_init_total) * 100.0)
-            pct_char_hist.append((M_char_curr / M_init_total) * 100.0)
-            pct_volatiles_hist.append((cum_vol / M_init_total) * 100.0)
-            pct_gnc_hist.append((cum_gnc / M_init_total) * 100.0)
-            pct_water_hist.append((cum_vap / M_init_total) * 100.0)
-            residual_mass_hist.append(((M_bio_curr + M_char_curr + np.sum(water * dV_bed)) / M_init_total) * 100.0)
-
-            snapshots_T.append(np.copy(T) - 273.15)
-            snapshot_times.append(t / 60.0)
-
         t += dt
+        if not np.all(np.isfinite(T)):
+            raise RuntimeError(f"La temperatura divergió en t = {t:.1f} s (dt = {dt:.4f} s). Revisa los datos de entrada.")
+
+    registrar()  # Estado final exacto en t = t_final
 
     dt_arr = np.diff(time_hist)
     dW_arr = np.diff(residual_mass_hist)
@@ -302,6 +317,7 @@ def ejecutar_simulacion(cfg):
         'pct_vol': np.array(pct_volatiles_hist),
         'pct_gnc': np.array(pct_gnc_hist),
         'pct_water': np.array(pct_water_hist),
+        'pct_water_remaining': np.array(pct_water_remaining_hist),
         'residual_mass': np.array(residual_mass_hist),
         'dtg': dtg,
         'snapshots_T': snapshots_T,
@@ -494,7 +510,12 @@ if __name__ == "__main__":
     print(f"  • Biovolátiles / Bio-oil (condensables):   {resultados['pct_vol'][-1]:5.1f} %")
     print(f"  • Gases No Condensables (GNC):             {resultados['pct_gnc'][-1]:5.1f} %")
     print(f"  • Vapor de agua (humedad):                 {resultados['pct_water'][-1]:5.1f} %")
-    total_balance = resultados['pct_char'][-1] + resultados['pct_vol'][-1] + resultados['pct_gnc'][-1] + resultados['pct_water'][-1]
-    print(f"  TOTAL BALANCE:                             {total_balance:5.1f} %")
+    if resultados['pct_biomass'][-1] > 0.1:
+        print(f"  • Biomasa sin reaccionar:                  {resultados['pct_biomass'][-1]:5.1f} %")
+    if resultados['pct_water_remaining'][-1] > 0.1:
+        print(f"  • Humedad sin evaporar:                    {resultados['pct_water_remaining'][-1]:5.1f} %")
+    total_balance = (resultados['pct_char'][-1] + resultados['pct_vol'][-1] + resultados['pct_gnc'][-1] + resultados['pct_water'][-1]
+                     + resultados['pct_biomass'][-1] + resultados['pct_water_remaining'][-1])
+    print(f"  TOTAL BALANCE DE MASA:                     {total_balance:6.2f} %")
     print("------------------------------------------------------------------")
     graficar_resultados(resultados)
