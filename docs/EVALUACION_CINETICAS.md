@@ -175,11 +175,20 @@ Con el simulador 2D (canastilla de R = 25 mm y L = 20 cm, tubo de acero de 2.5 m
 
 ## Cómo correrlo
 
+Desde VS Code basta con abrir el archivo y darle ▶. Desde la terminal, con el `.venv` activo:
+
 ```bash
-pip install -r requirements.txt pytest
-python -m pytest tests -v                 # balance de masa + cinética RAC (unos 4 min)
-cd python && python comparar_cineticas.py # tablas y figura de la sección 6
-cd .. && python simulador_interactivo.py  # reactor 2D; Enter usa los valores por defecto
+# Paquetes (una sola vez)
+pip install numpy scipy matplotlib pytest
+
+# Pruebas: balance de masa + cinética RAC (unos 4 min)
+python -m pytest tests -v
+
+# Tablas y figura de la sección 6
+python python/comparar_cineticas.py
+
+# Reactor 2D; Enter usa los valores por defecto
+python simulador_interactivo.py
 ```
 
 Archivos:
