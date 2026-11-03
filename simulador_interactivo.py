@@ -16,7 +16,10 @@ import subprocess
 
 # Auto-detección y re-ejecución con el entorno virtual .venv
 root_dir = os.path.dirname(os.path.abspath(__file__))
-venv_python = os.path.join(root_dir, ".venv", "Scripts", "python.exe")
+if os.name == "nt":
+    venv_python = os.path.join(root_dir, ".venv", "Scripts", "python.exe")
+else:
+    venv_python = os.path.join(root_dir, ".venv", "bin", "python")
 
 if os.path.exists(venv_python) and os.path.normcase(sys.executable) != os.path.normcase(venv_python):
     result = subprocess.run([venv_python] + sys.argv)
@@ -363,6 +366,10 @@ def ejecutar_simulacion(cfg, verbose=True):
         'Nr_bed': Nr_bed,
         'cfg': cfg
     }
+
+
+
+
 
 def graficar_resultados(res):
     t = res['time']
