@@ -207,13 +207,16 @@ class LumpedPyrolysisSimulator:
 
         M_unconverted = self.integrate_mass(state['biomass'])
         unconverted_pct = (M_unconverted / M_init_total) * 100.0
+        # Humedad que no alcanzó a evaporarse: sigue en el lecho y cuenta en el balance
+        water_remaining_pct = (self.integrate_mass(state['water']) / M_init_total) * 100.0
 
         final_yields = {
             'biochar_pct': yield_biochar_history[-1],
             'biovolatiles_pct': yield_volatiles_history[-1],
             'gnc_pct': yield_gnc_history[-1],
             'water_vapor_pct': yield_water_history[-1],
-            'unconverted_pct': unconverted_pct
+            'unconverted_pct': unconverted_pct,
+            'water_remaining_pct': water_remaining_pct
         }
 
         balance_check = sum(final_yields.values())
@@ -226,6 +229,8 @@ class LumpedPyrolysisSimulator:
             print(f"  • Vapor de agua (humedad):                 {final_yields['water_vapor_pct']:.2f} %")
             if unconverted_pct > 0.1:
                 print(f"  • Biomasa no convertida:                   {unconverted_pct:.2f} %")
+            if water_remaining_pct > 0.1:
+                print(f"  • Humedad sin evaporar:                    {water_remaining_pct:.2f} %")
             print(f"  TOTAL BALANCE DE MASA:                     {balance_check:.2f} %")
             print(f"===========================================================")
 

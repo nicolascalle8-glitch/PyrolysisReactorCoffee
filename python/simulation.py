@@ -226,13 +226,16 @@ class PyrolysisSimulator:
             self.integrate_mass(state['lip'])
         )
         unconverted_pct = (M_unconverted / M_init_total) * 100.0
+        # Humedad que no alcanzó a evaporarse: sigue en el lecho y cuenta en el balance
+        water_remaining_pct = (self.integrate_mass(state['w']) / M_init_total) * 100.0
 
         final_yields = {
             'biochar_pct': yield_biochar_history[-1],
             'biogas_pct': yield_biogas_history[-1],
             'biovolatiles_pct': yield_biovolatiles_history[-1],
             'water_vapor_pct': yield_water_history[-1],
-            'unconverted_pct': unconverted_pct
+            'unconverted_pct': unconverted_pct,
+            'water_remaining_pct': water_remaining_pct
         }
         
         balance_check = sum(final_yields.values())
@@ -245,6 +248,8 @@ class PyrolysisSimulator:
             print(f"  • Vapor de agua (humedad + agua de pirolisis): {final_yields['water_vapor_pct']:.2f} %")
             if unconverted_pct > 0.1:
                 print(f"  • Biomasa no convertida: {unconverted_pct:.2f} %")
+            if water_remaining_pct > 0.1:
+                print(f"  • Humedad sin evaporar: {water_remaining_pct:.2f} %")
             print(f"  TOTAL BALANCE DE MASA: {balance_check:.2f} %")
             print(f"===========================================================")
 
