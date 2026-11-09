@@ -1,6 +1,10 @@
 """Pruebas de motor.cinetica: RAC + TGL (traídas de legacy/tests/test_cinetica_rac.py) y secado."""
+import os
+
 import numpy as np
 import pytest
+
+from conftest import RAIZ
 
 from motor.cinetica import REGIMENES, CineticaRAC, paso_secado
 
@@ -28,15 +32,16 @@ def test_masa_se_conserva_para_cualquier_paso(T, dt):
 
 
 def test_igual_a_legacy():
-    """La química no cambió: mismo resultado que legacy/python/kinetics_rac.py."""
-    import kinetics_rac as viejo  # legacy/conftest.py no aplica aquí: se agrega la ruta a mano
+    """La química no cambió: mismo resultado que legacy/python/kinetics_rac.py (foto guardada el 2026-11-08
+    en tests/referencia/rac_legacy_paso.npz, antes de borrar legacy/)."""
+    ref = np.load(os.path.join(RAIZ, "tests", "referencia", "rac_legacy_paso.npz"))
     for regimen in REGIMENES:
-        a, b = CineticaRAC(regimen), viejo.CineticaRAC(regimen)
-        ma, mb = a.estado_inicial(300.0, forma=(2,)), b.estado_inicial(300.0, forma=(2,))
+        a = CineticaRAC(regimen)
+        ma = a.estado_inicial(300.0, forma=(2,))
         qa, la = a.paso(ma, np.array([600.0, 750.0]), 10.0)
-        qb, lb = b.paso(mb, np.array([600.0, 750.0]), 10.0)
-        assert np.array_equal(ma, mb) and np.array_equal(qa, qb)
-        assert all(np.array_equal(la[f], lb[f]) for f in la)
+        assert np.allclose(ma, ref[f"{regimen}_m"], rtol=1e-13, atol=0)
+        assert np.allclose(qa, ref[f"{regimen}_q"], rtol=1e-13, atol=0)
+        assert all(np.allclose(la[f], ref[f"{regimen}_{f}"], rtol=1e-13, atol=0) for f in la)
 
 
 def test_secado_humedad_cero():

@@ -136,7 +136,7 @@ max      = 1000
 valor    = 0.0
 unidad   = "-"
 etiqueta = "Por validar"
-fuente   = "0 = la radiación ya va dentro de h_c (como legacy); se calibra en B"
+fuente   = "0 = la radiación va dentro de h_c (como legacy). Incropera Tabla A.11 (acero inoxidable típico, muy oxidado) ≈0.7 [Por validar]; separar de h_c en B"
 min      = 0
 max      = 1
 
@@ -202,8 +202,8 @@ max      = 200
 [lecho.rho_aparente]
 valor    = 380.0
 unidad   = "kg/m³"
-etiqueta = "Supuesto"
-fuente   = "legacy (rho_bulk), sin fuente"
+etiqueta = "Por validar"
+fuente   = "Legacy 380 kg/m³; Guendouz et al. 2023, ALJEST 9(3): 387 kg/m³ (SCG seco a 105 °C, suelto). Medir a 8 % de humedad"
 min      = 100
 max      = 1000
 
@@ -224,10 +224,10 @@ min      = 0
 max      = 20
 
 [lecho.celulosa]
-valor    = 12.0
+valor    = 12.4
 unidad   = "%"
-etiqueta = "Supuesto"
-fuente   = "Sin fuente (no está en el reporte GIEM); legacy COMPOSICION_SCG"
+etiqueta = "Dato"
+fuente   = "Ballesteros et al. 2014, Food Bioprocess Technol 7:3493–3503, Tabla 1 (SCG, base seca): 12.40 ± 0.79 %. Verificado en la REVISIÓN del 2026-11-08; aprobado por Nick"
 min      = 0
 max      = 100
 
@@ -235,31 +235,31 @@ max      = 100
 valor    = 35.0
 unidad   = "%"
 etiqueta = "Supuesto"
-fuente   = "Sin fuente (no está en el reporte GIEM); legacy COMPOSICION_SCG"
+fuente   = "Se deja 35 % (legacy). Literatura 34–39 % bs: Ballesteros et al. 2014, Food Bioprocess Technol 7:3493–3503, Tabla 1 (SCG, base seca) da 39.10 ± 1.94 %; Oliva et al. 2022 ≈34 %"
 min      = 0
 max      = 100
 
 [lecho.lignina]
-valor    = 28.0
+valor    = 23.9
 unidad   = "%"
-etiqueta = "Supuesto"
-fuente   = "Sin fuente (no está en el reporte GIEM); legacy COMPOSICION_SCG"
+etiqueta = "Dato"
+fuente   = "Ballesteros et al. 2014, Food Bioprocess Technol 7:3493–3503, Tabla 1 (SCG, base seca): AIL 17.59 + ASL 6.31 = 23.90 %. Legacy usaba 28 % sin fuente. Aprobado por Nick 2026-11-08"
 min      = 0
 max      = 100
 
 [lecho.lipidos]
 valor    = 15.0
 unidad   = "%"
-etiqueta = "Supuesto"
-fuente   = "Sin fuente (no está en el reporte GIEM); legacy COMPOSICION_SCG"
+etiqueta = "Por validar"
+fuente   = "Legacy 15 %; Atabani et al. 2019, Fuel 254 (revisión) da 13.4–21.5 % bs. Medir con Soxhlet (hexano) en el GIEM"
 min      = 0
 max      = 100
 
 [lecho.otros]
-valor    = 7.69
+valor    = 11.39
 unidad   = "%"
 etiqueta = "Calculado"
-fuente   = "100 − (celulosa + hemicelulosa + lignina + lípidos + cenizas); se reparte en proporción (legacy)"
+fuente   = "100 − (celulosa + hemicelulosa + lignina + lípidos + cenizas) = 100 − 88.61; proteína y extractivos, se reparte en proporción (legacy)"
 min      = 0
 max      = 100
 

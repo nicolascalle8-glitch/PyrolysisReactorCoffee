@@ -42,7 +42,7 @@ PyrolysisReactorCoffee/
 ```
 
 - `legacy/` contiene: `simulador_interactivo.py`, `python/`, `run_simulation.py`, `run_lumped.py`, `tests/` actuales. Solo se ajustan rutas de import para que sus pruebas sigan corriendo desde `legacy/`.
-- `legacy/` se borra solo cuando el motor pase la sección 9 y Nick lo apruebe.
+- `legacy/` se borra solo cuando el motor pase la sección 9 y Nick lo apruebe. **Hecho el 2026-11-08** (aprobado por Nick); queda en el historial de git (commit c2acaae).
 - `.gitignore` incluye `resultados/` y `datos/` para que nada de laboratorio se suba por error.
 - Python ≥ 3.10. TOML con `tomllib` (3.11+) o `tomli` (3.10).
 

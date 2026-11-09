@@ -18,12 +18,11 @@ python3 -m venv .venv
 |---|---|
 | `motor/` | Paquete del motor nuevo (parámetros, malla, conducción implícita, cinética, horno, simulador) |
 | `parametros/base.toml` | Caso base: cada parámetro con unidad, etiqueta, fuente y rango |
-| `tests/` | Pruebas del motor (`python -m pytest tests -q`) |
+| `tests/` | Pruebas del motor (`python -m pytest tests -q`); `tests/referencia/` guarda la curva y la química de legacy para compararlas |
 | `calibracion/` | Subproyecto B (vacío) |
 | `app/` | Subproyecto C, app Streamlit (vacío) |
 | `matlab/` | Modelos MATLAB y verificación térmica |
 | `docs/` | Specs, planes, evaluación de cinéticas |
-| `legacy/` | Código anterior, sin cambios de lógica (se borra con aprobación de Nick) |
 
 `datos/` y `resultados/` están en `.gitignore`: nada de laboratorio se sube (el repo es público).
 
@@ -66,3 +65,9 @@ En macOS el lote necesita el `if __name__ == "__main__":` en el script (los proc
 
 Las pruebas 1–8 del spec (`docs/specs/2026-11-08-motor-nuevo-design.md` §9) están en `tests/`. La prueba 7
 (MATLAB) está en `matlab/verificacion/`.
+
+## Código anterior
+
+El simulador anterior (`simulador_interactivo.py`, `python/`) se borró el 2026-11-08 con la aprobación de Nick,
+después de que el motor pasó las 8 pruebas del spec. Sigue en el historial de git: `git show c2acaae:legacy/simulador_interactivo.py`.
+Las validaciones de cinética (Bok 2012, Inayat 2022) pasaron a `tests/test_validacion_cinetica.py` con `motor.cinetica.tga`.

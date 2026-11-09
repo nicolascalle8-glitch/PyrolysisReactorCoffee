@@ -3,15 +3,19 @@ Pruebas de motor.simulador: caso base contra legacy (prueba 2), balances en 16 c
 temperatura baja, divergencia y exportación.
 """
 import json
+import os
 
 import numpy as np
 import pytest
 
-from conftest import BASE
+from conftest import BASE, RAIZ
 import motor.simulador as sim_mod
 from motor import ErrorSimulacion, cargar_parametros, simular
 
 LEGACY_REF = {"biochar": 24.93, "bio_oil": 38.94, "gas": 20.23, "agua": 15.90}  # spec §9, prueba 2
+# Composición con la que corría legacy (12/35/28/15 % bs). base.toml ya usa la de Ballesteros 2014.
+COMPOSICION_LEGACY = {"lecho.celulosa": 12.0, "lecho.hemicelulosa": 35.0, "lecho.lignina": 28.0,
+                      "lecho.lipidos": 15.0, "lecho.otros": 7.69}
 
 # Casos de legacy/tests/test_balance_masa.py (CASOS_INTERACTIVO) traducidos a cambios del TOML,
 # sobre el mismo programa corto de esas pruebas (50 °C/min, meseta 5 min).
@@ -39,15 +43,14 @@ CASOS = {
 
 @pytest.fixture(scope="module")
 def base():
-    return simular(cargar_parametros(BASE))
+    return simular(cargar_parametros(BASE, COMPOSICION_LEGACY))
 
 
 @pytest.fixture(scope="module")
 def legacy_base():
-    import simulador_interactivo as legacy
-    cfg = dict(cinetica="rac", regimen="lecho_fijo", ramp_rate=10.0, T_final=500.0, soak_time=30.0,
-               tau_stone=200.0, R_int=0.025, e_inox=0.0025, L=0.20, w_H2O=0.08)
-    return legacy.ejecutar_simulacion(cfg, verbose=False)
+    """T_centro de legacy/simulador_interactivo.py en el caso base (guardada el 2026-11-08, antes de borrar legacy/)."""
+    datos = np.loadtxt(os.path.join(RAIZ, "tests", "referencia", "legacy_caso_base.csv"), delimiter=",", skiprows=1)
+    return {"time": datos[:, 0], "T_center": datos[:, 1]}
 
 
 @pytest.mark.lento
@@ -55,8 +58,6 @@ def test_caso_base_vs_legacy(base, legacy_base):
     r = base.rendimientos
     for clave, ref in LEGACY_REF.items():
         assert abs(r[clave] - ref) <= 1.0, f"{clave}: motor {r[clave]:.2f} vs legacy {ref:.2f}"
-    # la referencia del spec debe ser lo que legacy da hoy
-    assert legacy_base["pct_char"][-1] == pytest.approx(LEGACY_REF["biochar"], abs=0.01)
     h = base.historia
     T_leg = np.interp(h["t"], legacy_base["time"], legacy_base["T_center"])
     rms = float(np.sqrt(np.mean((h["T_centro"] - T_leg) ** 2)))

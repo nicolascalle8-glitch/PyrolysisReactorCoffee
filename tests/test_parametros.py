@@ -9,7 +9,7 @@ def test_carga_base():
     p = cargar_parametros(BASE)
     assert p["programa.rampa"] == 10.0
     assert p.info("lecho.cenizas").etiqueta == "Dato"
-    assert "lecho.celulosa" in p.supuestos()
+    assert "lecho.hemicelulosa" in p.supuestos() and "lecho.celulosa" not in p.supuestos()
 
 
 def test_cambio_valido():
@@ -52,3 +52,13 @@ def test_composicion_no_suma():
 def test_opcion_invalida():
     with pytest.raises(ErrorParametro, match="horno.modo"):
         cargar_parametros(BASE, {"horno.modo": "magico"})
+
+
+def test_composicion_con_fuente_ballesteros():
+    """Composición aprobada por Nick (2026-11-08) tras la REVISIÓN de la investigación de Gemini."""
+    p = cargar_parametros(BASE)
+    assert p["lecho.celulosa"] == 12.4 and p["lecho.lignina"] == 23.9
+    for c in ("celulosa", "lignina"):
+        assert p.info(f"lecho.{c}").etiqueta == "Dato" and "Ballesteros" in p.info(f"lecho.{c}").fuente
+    assert p.info("lecho.lipidos").etiqueta == "Por validar"
+    assert p.info("lecho.rho_aparente").etiqueta == "Por validar"

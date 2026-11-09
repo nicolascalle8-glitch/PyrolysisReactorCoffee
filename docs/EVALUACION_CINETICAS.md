@@ -1,5 +1,7 @@
 # Evaluación de las cinéticas de pirólisis del café
 
+> Nota (2026-11-08): el código que cita este informe (`simulador_interactivo.py`, `python/`) se borró del repo; está en el historial de git (commit c2acaae, carpeta `legacy/`). El motor nuevo está en `motor/`.
+
 Proyecto: reactor de pirólisis de residuos de café (SCG), horno eléctrico con canastilla.
 Fecha: 2026-10-28. Rama: `claude/determined-curie-2btbhr`.
 
