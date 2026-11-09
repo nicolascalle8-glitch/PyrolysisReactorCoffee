@@ -11,4 +11,4 @@ h = 90 W/m²K, 30 min, sin reacción. Criterio: error máximo ≤ 1 % de (T_horn
 2. En MATLAB: `cd matlab/verificacion` y `verificar_conduccion`.
 3. Pegar en la bitácora las dos últimas líneas que imprime.
 
-Resultado de referencia (GNU Octave en Linux, 2026-11-08): error máximo 0.349 K → PASA. El BDF de Python da lo mismo (0.349 K).
+Resultado (2026-11-08): MATLAB en el Mac de Nick 0.349 K → PASA; GNU Octave en Linux 0.349 K; BDF de Python 0.349 K. Volúmenes iguales a Python (diferencia relativa 1.6e-11).
