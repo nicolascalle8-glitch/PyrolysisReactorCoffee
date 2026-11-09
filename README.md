@@ -7,7 +7,7 @@ El motor (`motor/`) es la base del "tuner" del horno: calibrar el modelo, sinton
 ## Instalar (Mac)
 
 ```bash
-cd ~/Documents/Documents\ -\ MacBook\ Pro\ de\ Nicolas/Max_Power/01_Horno_Vertical/modelos/PyrolysisReactorCoffee
+cd ~/Developer/Max_Power/01_Horno_Vertical/modelos/PyrolysisReactorCoffee
 python3 -m venv .venv
 .venv/bin/pip install -e ".[pruebas]"
 ```
