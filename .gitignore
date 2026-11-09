@@ -42,3 +42,6 @@ datos/
 # Espacio de trabajo de los agentes
 .superpowers/
 *.egg-info/
+
+# CSV de la verificación MATLAB (se regeneran con exportar_caso.py)
+matlab/verificacion/caso_conduccion*.csv
