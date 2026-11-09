@@ -190,7 +190,7 @@ class Simulacion:
             err_masa = max(err_masa, abs(sum(r.values()) - 100.0))
             err_E = max(err_E, 100.0 * abs(e.err_E) / max(e.E_abs, 1e-30))
             T = e.T - C_A_K
-            hist["t"].append(e.t / 60.0); hist["T_horno"].append(e.T_h - C_A_K); hist["T_set"].append(e.T_set - C_A_K)
+            hist["t"].append(e.t / 60.0); hist["T_horno"].append(e.T_h - C_A_K); hist["T_set"].append(self.prog.setpoint(e.t) - C_A_K)
             hist["T_pared"].append(T[-1, self.mid]); hist["T_lecho_superficie"].append(T[self.Nl - 1, self.mid])
             hist["T_centro"].append(T[0, self.mid]); hist["T_termopar_control"].append(e.T_tc - C_A_K)
             hist["masa_residual"].append(residual); hist["u"].append(e.u)
