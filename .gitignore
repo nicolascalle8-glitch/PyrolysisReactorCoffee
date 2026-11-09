@@ -34,3 +34,11 @@ Thumbs.db
 # Figuras que generan los scripts al correr (se regeneran; solo se suben las del documento)
 *.png
 !docs/figuras/*.png
+
+# Datos de laboratorio y resultados: nunca al repo (repo público)
+resultados/
+datos/
+
+# Espacio de trabajo de los agentes
+.superpowers/
+*.egg-info/
