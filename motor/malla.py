@@ -36,24 +36,28 @@ class Malla:
         return self.V.shape
 
 
-def crear_malla(p) -> Malla:
+def crear_malla(p, con_acero: bool = True) -> Malla:
+    """con_acero=False deja solo el lecho (cara externa en R_lecho); lo usa la prueba de Bessel."""
     R = p["geometria.R_lecho"]
-    e = p["geometria.e_acero"]
+    e = p["geometria.e_acero"] if con_acero else 0.0
     L = p["geometria.L"]
-    Nl, Na, Nz = p["malla.Nr_lecho"], p["malla.Nr_acero"], p["malla.Nz"]
+    Nl, Nz = p["malla.Nr_lecho"], p["malla.Nz"]
+    Na = p["malla.Nr_acero"] if con_acero else 0
     R_ext = R + e
 
     r_l = np.linspace(0.0, R, Nl)
-    dr_a = e / Na
+    dr_a = e / Na if Na else 0.0
     r_a = R + dr_a * np.arange(1, Na + 1)
-    r_a[-1] = R_ext
+    if Na:
+        r_a[-1] = R_ext
     r = np.concatenate([r_l, r_a])
 
     caras = np.empty(Nl + Na + 1)
     caras[0] = 0.0
     caras[1:Nl] = 0.5 * (r_l[1:] + r_l[:-1])
     caras[Nl] = R
-    caras[Nl + 1:Nl + Na] = 0.5 * (r_a[1:] + r_a[:-1])
+    if Na:
+        caras[Nl + 1:Nl + Na] = 0.5 * (r_a[1:] + r_a[:-1])
     caras[-1] = R_ext
 
     z = np.linspace(0.0, L, Nz)
