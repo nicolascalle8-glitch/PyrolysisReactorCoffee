@@ -57,7 +57,7 @@ fprintf('Volúmenes: diferencia máxima relativa con Python = %.2e\n', max(abs(V
 % ---------- Conductancias (W/K)
 armonica = @(a, b) 2 * a .* b ./ (a + b);
 G_r = (2 * pi * caras(2:Nr)) * dz_k .* armonica(k(1:end-1, :), k(2:end, :)) ./ diff(r);
-R_serie = meta.dr_lecho ./ (2 * k(Nl, :)) + meta.dr_acero ./ (2 * k(Nl + 1, :)) + meta.R_contacto_extra;
+R_serie = meta.dr_acero ./ k(Nl + 1, :) + meta.R_contacto_extra;   % nodo del lecho sobre la cara; acero a dr_a
 G_r(Nl, :) = 2 * pi * meta.R_lecho * dz_k ./ R_serie;
 area_z = pi * (caras(2:end).^2 - caras(1:end-1).^2);
 G_z = repmat(area_z, 1, Nz - 1) .* armonica(k(:, 1:end-1), k(:, 2:end)) / meta.dz;

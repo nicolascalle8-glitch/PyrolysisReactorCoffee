@@ -1,5 +1,5 @@
 # Caso base del motor nuevo. Cada parámetro: valor, unidad, etiqueta, fuente, rango [min, max].
-# Etiquetas: Dato | Medido | Norma | Supuesto | Calculado | Por validar (shared/CONTRATO-OPERATIVO.md).
+# Etiquetas: Dato | Medido | Norma | Supuesto | Calculado | Por validar (contrato de las IAs en Skill_Repository).
 # Composición del lecho en % base seca: celulosa + hemicelulosa + lignina + lipidos + otros + cenizas = 100.
 # Humedad en % base húmeda. Temperaturas del programa en °C (el motor trabaja en K por dentro).
 
@@ -264,12 +264,109 @@ min      = 0
 max      = 100
 
 [lecho.R_contacto_extra]
-valor    = 0.003
+valor    = 0.011
 unidad   = "m²·K/W"
-etiqueta = "Supuesto"
-fuente   = "legacy (resistencia de contacto canastilla–tubo), sin fuente"
-min      = 0
+etiqueta = "Calculado"
+fuente   = "Resistencia lecho–acero efectiva de legacy en su malla (14 nodos): 0.003 (legacy, sin fuente) + Δr_l/(2·k_l(298 K)) = 0.001923/(2·0.12) = 0.0080, menos la diferencia de conducción en el acero (−0.00002). El motor ya no agrega Δr_l/(2k_l), que dependía de la malla. Se calibra en B"
+min      = 0.0
 max      = 0.1
+
+[lecho.k_virgen_0]
+valor    = 0.12
+unidad   = "W/(m·K)"
+etiqueta = "Supuesto"
+fuente   = "legacy simulador_interactivo.py (k_bed, café virgen a 298.15 K), sin fuente; se calibra en B"
+min      = 0.02
+max      = 1.0
+
+[lecho.k_virgen_pend]
+valor    = 1.5e-4
+unidad   = "W/(m·K²)"
+etiqueta = "Supuesto"
+fuente   = "legacy k_bed: k = k_0 + pend·(T − 298.15 K), sin fuente"
+min      = 0.0
+max      = 0.01
+
+[lecho.k_char_0]
+valor    = 0.08
+unidad   = "W/(m·K)"
+etiqueta = "Supuesto"
+fuente   = "legacy k_bed (char a 298.15 K), sin fuente; Gupta et al. 2003 (char de madera blanda) da ≈0.095 [Por validar]"
+min      = 0.02
+max      = 1.0
+
+[lecho.k_char_pend]
+valor    = 2.0e-4
+unidad   = "W/(m·K²)"
+etiqueta = "Supuesto"
+fuente   = "legacy k_bed: k = k_0 + pend·(T − 298.15 K), sin fuente"
+min      = 0.0
+max      = 0.01
+
+[lecho.cp_virgen_0]
+valor    = 1250.0
+unidad   = "J/(kg·K)"
+etiqueta = "Supuesto"
+fuente   = "legacy cp_bed (café virgen a 273.15 K), sin fuente"
+min      = 500.0
+max      = 3000.0
+
+[lecho.cp_virgen_pend]
+valor    = 1.8
+unidad   = "J/(kg·K²)"
+etiqueta = "Supuesto"
+fuente   = "legacy cp_bed: cp = cp_0 + pend·(T − 273.15 K), sin fuente"
+min      = 0.0
+max      = 10.0
+
+[lecho.cp_char_0]
+valor    = 720.0
+unidad   = "J/(kg·K)"
+etiqueta = "Supuesto"
+fuente   = "legacy cp_bed (char a 273.15 K), sin fuente"
+min      = 300.0
+max      = 3000.0
+
+[lecho.cp_char_pend]
+valor    = 2.2
+unidad   = "J/(kg·K²)"
+etiqueta = "Supuesto"
+fuente   = "legacy cp_bed: cp = cp_0 + pend·(T − 273.15 K), sin fuente"
+min      = 0.0
+max      = 10.0
+
+# ---------------- secado ----------------
+[secado.A]
+valor    = 5.0e5
+unidad   = "1/s"
+etiqueta = "Supuesto"
+fuente   = "legacy simulador_interactivo.py (A_evap), sin fuente"
+min      = 1.0
+max      = 1.0e12
+
+[secado.Ea]
+valor    = 41.8e3
+unidad   = "J/mol"
+etiqueta = "Supuesto"
+fuente   = "legacy simulador_interactivo.py (Ea_evap), sin fuente"
+min      = 1.0e3
+max      = 2.0e5
+
+[secado.dH]
+valor    = -2.26e6
+unidad   = "J/kg"
+etiqueta = "Supuesto"
+fuente   = "legacy (dH_evap); calor latente del agua a 100 °C h_fg = 2256.5 kJ/kg (Çengel y Boles, Termodinámica, tabla A-4; edición a confirmar). Signo: positivo = exotérmico"
+min      = -3.0e6
+max      = -1.0e6
+
+[secado.T_umbral]
+valor    = 350.0
+unidad   = "K"
+etiqueta = "Supuesto"
+fuente   = "legacy simulador_interactivo.py (sin evaporación por debajo de 350 K), sin fuente"
+min      = 273.15
+max      = 400.0
 
 # ---------------- acero ----------------
 [acero.rho]

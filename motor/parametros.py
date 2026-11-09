@@ -9,6 +9,7 @@ Cualquier problema lanza ErrorParametro con el nombre del parámetro y el motivo
 """
 
 import copy
+import numbers
 import sys
 from dataclasses import dataclass, field
 
@@ -68,7 +69,19 @@ UNIDADES = {
     "numerica.dt_max": "s",
     "numerica.dT_max": "K",
     "numerica.dX_max": "-",
-    "numerica.t_registro": "s",}
+    "numerica.t_registro": "s",    "lecho.k_virgen_0": "W/(m·K)",
+    "lecho.k_virgen_pend": "W/(m·K²)",
+    "lecho.k_char_0": "W/(m·K)",
+    "lecho.k_char_pend": "W/(m·K²)",
+    "lecho.cp_virgen_0": "J/(kg·K)",
+    "lecho.cp_virgen_pend": "J/(kg·K²)",
+    "lecho.cp_char_0": "J/(kg·K)",
+    "lecho.cp_char_pend": "J/(kg·K²)",
+    "secado.A": "1/s",
+    "secado.Ea": "J/mol",
+    "secado.dH": "J/kg",
+    "secado.T_umbral": "K",
+}
 ENTEROS = ("malla.Nr_lecho", "malla.Nr_acero", "malla.Nz")
 
 
@@ -140,7 +153,9 @@ def _validar(datos: dict[str, Parametro]) -> None:
             if d.valor not in d.opciones:
                 raise ErrorParametro(f"{clave}: '{d.valor}' no es una opción válida {d.opciones}")
             continue
-        if isinstance(d.valor, bool) or not isinstance(d.valor, (int, float)):
+        # Acepta int/float de Python y de numpy (barridos con np.arange o pandas); rechaza bool
+        es_bool = isinstance(d.valor, bool) or type(d.valor).__name__ in ("bool_", "bool")
+        if es_bool or not isinstance(d.valor, numbers.Real):
             raise ErrorParametro(f"{clave}: el valor debe ser un número, no {d.valor!r}")
         if clave in ENTEROS:
             if float(d.valor) != int(d.valor):

@@ -8,7 +8,10 @@ Devuelve: (Tⁿ⁺¹, Q) con Q el calor que entró por la cara externa en el pas
 Ecuación (volúmenes finitos, coordenadas cilíndricas, Incropera cap. 4–5):
   ρcp·V·(Tⁿ⁺¹ − Tⁿ)/dt = Σ_vecinos G·(T_vecino − T)ⁿ⁺¹ + G_ext·(T_horno − T)ⁿ⁺¹
   G radial  = 2π r_cara·dz_k · k_cara / Δr          (k_cara = media armónica)
-  G interfaz = 2π R_lecho·dz_k / (Δr_l/(2k_l) + Δr_a/(2k_a) + R_contacto)   (como legacy)
+  G interfaz = 2π R_lecho·dz_k / (Δr_a/k_a + R_contacto)
+             (el último nodo del lecho está sobre la cara r = R_lecho: del lado del lecho no hay distancia;
+              el primer nodo de acero está a Δr_a de la cara. Así la resistencia no cambia al refinar la malla.
+              Legacy usaba Δr_l/(2k_l) + Δr_a/(2k_a), que depende de la malla; ver lecho.R_contacto_extra.)
   G axial   = π (r_e² − r_i²) · k_cara / dz           (caras superior e inferior adiabáticas)
   G_ext     = 2π R_ext·dz_k · h_ext
 En r = 0 el volumen central π(Δr/2)²·dz no tiene cara interna (equivale a L'Hôpital).
@@ -31,7 +34,7 @@ def conductancias(malla, k, R_contacto):
     dr = np.diff(m.r)[:, None]
     G_r = m.A_r[1:-1, None] * m.dz_k[None, :] * _media_armonica(k[:-1], k[1:]) / dr
     if m.r.size > Nl:  # interfaz lecho–acero
-        R_serie = m.dr_lecho / (2.0 * k[Nl - 1]) + m.dr_acero / (2.0 * k[Nl]) + R_contacto
+        R_serie = m.dr_acero / k[Nl] + R_contacto
         G_r[Nl - 1] = m.A_r[Nl] * m.dz_k / R_serie
     area_z = np.pi * (m.r_caras[1:] ** 2 - m.r_caras[:-1] ** 2)
     G_z = area_z[:, None] * _media_armonica(k[:, :-1], k[:, 1:]) / m.dz

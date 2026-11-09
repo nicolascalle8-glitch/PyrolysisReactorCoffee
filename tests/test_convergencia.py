@@ -3,6 +3,7 @@ import os
 import platform
 import time
 
+import numpy as np
 import pytest
 
 from conftest import BASE
@@ -21,8 +22,11 @@ def test_dt_mitad():
     mitad = {c: p[c] / 2 for c in ("numerica.dt0", "numerica.dt_max", "numerica.dT_max", "numerica.dX_max")}
     a, b = simular(p), simular(p.con_cambios(mitad))
     d = _max_dif(a, b)
-    print(f"\nprueba 4: dt/2 cambia los rendimientos {d:.3f} pp (pasos {a.pasos} → {b.pasos})")
+    hb = b.historia
+    rms = float(np.sqrt(np.mean((a.historia["T_centro"] - np.interp(a.historia["t"], hb["t"], hb["T_centro"])) ** 2)))
+    print(f"\nprueba 4: dt/2 cambia los rendimientos {d:.3f} pp y T_centro {rms:.2f} K RMS (pasos {a.pasos} → {b.pasos})")
     assert d < 0.2
+    assert rms <= 5.0  # la exoterma del centro es un frente rápido: el criterio térmico es más flojo que el de malla
 
 
 @pytest.mark.lento

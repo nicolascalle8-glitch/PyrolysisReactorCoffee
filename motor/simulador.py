@@ -11,7 +11,8 @@ Un paso dt:
  4. Química con Tⁿ⁺¹: RAC + TGL y secado, integración exacta; el calor de reacción ajusta T (ΔT = q·dt/ρcp).
  5. Control de dt (spec §5.5): si algún nodo cambia más de numerica.dT_max o la conversión más de
     numerica.dX_max, se repite el paso con dt/2; si el cambio es menor que la mitad del límite, dt crece ×1.5
-    hasta numerica.dt_max. En SSR onoff con horno físico, dt ≤ t_ciclo. Piso DT_MIN para no quedar en bucle.
+    hasta numerica.dt_max. Con horno físico ningún paso cruza un instante de muestreo del PID
+    (control.t_muestreo), y con SSR onoff dt ≤ t_ciclo. Piso DT_MIN para no quedar en bucle.
  6. Registro cada numerica.t_registro.
 Balance de energía por paso: Σ ρcp·V·ΔT = Q_externo + Q_reacción (debe dar ~0 por construcción).
 """
@@ -25,7 +26,7 @@ from .conduccion import paso_conduccion
 from .control import PID, SSR, Programa
 from .horno import HornoFisico, HornoIdeal
 from .malla import crear_malla
-from .propiedades import cp_lecho, k_lecho, rho_lecho
+from .propiedades import coeficientes, cp_lecho, k_lecho, rho_lecho
 from .resultados import Resultado
 from .termopar import Termopar, nodo_mas_cercano
 
@@ -91,6 +92,8 @@ class Simulacion:
         self.tc = Termopar(p["termopares.tau"])
         self.nodo_tc = nodo_mas_cercano(m, p["termopares.control_r"], p["termopares.control_z"])
         self.mid = Nz // 2
+        self.coef = coeficientes(p)
+        self.secado = {c: p[f"secado.{c}"] for c in ("A", "Ea", "dH", "T_umbral")}
 
         T0 = self.prog.T_ini
         self.e = _Estado(t=0.0, T=np.full(m.forma, T0), especies=especies,
@@ -106,9 +109,9 @@ class Simulacion:
         Tl = e.T[:Nl]
         k = np.full(e.T.shape, self.k_acero)
         rc = np.full(e.T.shape, self.rho_cp_acero)
-        k[:Nl] = k_lecho(Tl, conv)
+        k[:Nl] = k_lecho(Tl, conv, self.coef)
         rho = rho_lecho(np.stack([self.kin.masa_solida(e.especies), np.full_like(Tl, self.rho_ceniza), e.agua]))
-        rc[:Nl] = rho * cp_lecho(Tl, conv)
+        rc[:Nl] = rho * cp_lecho(Tl, conv, self.coef)
         return k, rc, conv
 
     # ---------------------------------------------------------------- un paso
@@ -133,7 +136,7 @@ class Simulacion:
         Nl = self.Nl
         Tq = np.maximum(T_new[:Nl], C_A_K)
         q_pir, lib = self.kin.paso(e.especies, Tq, dt)
-        e.agua, evap, q_sec = paso_secado(e.agua, Tq, dt)
+        e.agua, evap, q_sec = paso_secado(e.agua, Tq, dt, **self.secado)
         q = q_pir + q_sec
         T_new[:Nl] += q * dt / rc[:Nl]
         Q_rxn = float(np.sum(q * dt * self.V_l))
@@ -214,6 +217,11 @@ class Simulacion:
                 continue
             while True:
                 h = min(dt, t_fin - e.t)
+                if self.fisico:  # el PID muestrea cada t_muestreo: el paso no cruza la siguiente muestra
+                    t_muestra = self.pid.siguiente_muestra()
+                    if t_muestra is None or t_muestra <= e.t + 1e-9:   # muestrea al inicio de este paso
+                        t_muestra = e.t + self.pid.t_muestreo
+                    h = min(h, t_muestra - e.t)
                 foto, pid_foto = e.copia(), copy.deepcopy(self.pid)
                 dT, dX = self.paso(e, h)
                 if (dT <= lim_T and dX <= lim_X) or dt <= DT_MIN:

@@ -36,6 +36,10 @@ class PID:
         self._e_ultimo = 0.0
         self.u = 0.0
 
+    def siguiente_muestra(self):
+        """Instante de la próxima muestra (None si todavía no ha muestreado)."""
+        return None if self._t_ultimo is None else self._t_ultimo + self.t_muestreo
+
     def calcular(self, t, setpoint, medida) -> float:
         if self._t_ultimo is not None and t < self._t_ultimo + self.t_muestreo - 1e-9:
             return self.u

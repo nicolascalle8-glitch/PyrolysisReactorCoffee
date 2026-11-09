@@ -6,7 +6,10 @@ cenizas, sin la biomasa original que queda), bio_oil, gas, agua (humedad evapora
 sin_reaccionar (biomasa original que queda) y humedad_restante.
 Resultado.historia: arreglos con t en min y T en °C. Resultado.mapas: lista de (t en min, matriz T r–z en °C).
 balance_masa: error máximo del cierre de masa en el tiempo (% de la carga).
-balance_energia: error acumulado máximo (% de la energía entregada al tubo).
+balance_energia: cierre NUMÉRICO del solver: |Σ (ρcp·V·ΔT − Q_externo − Q_reacción)| por paso, en % de la
+  energía que entró al tubo. Usa el mismo ρcp del paso que usó la conducción, así que cierra por construcción
+  (~1e-8 %): detecta errores de la numérica (matriz, signos, pasos repetidos), NO el error físico de tomar k y
+  cp del paso anterior ni errores de las correlaciones. El balance de masa sí es una verificación física.
 """
 
 import csv
