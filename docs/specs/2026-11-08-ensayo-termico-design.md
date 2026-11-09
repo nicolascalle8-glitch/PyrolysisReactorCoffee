@@ -1,6 +1,11 @@
 # Spec — Ensayo térmico y calibración (subproyecto B)
 
-Fecha: 2026-11-08 (Bogotá). Estado: **borrador para aprobar por Nick**. Base: spec del motor §6 y §11, `parametros/base.toml` (main, ed907cf).
+Fecha: 2026-11-08 (Bogotá). Estado: **aprobado por Nick el 2026-11-09 08:40** (decisiones 9–11 del CONTEXTO). Base: spec del motor §6 y §11, `parametros/base.toml` (main, ed907cf).
+
+**Aprobaciones:**
+- Decisión 9, criterio de cierre: RMS T_pared ≤ 5 K (las dos corridas); RMS T_centro ≤ 10 K fuera de la pirólisis y ≤ 20 K en ella (§6).
+- Decisión 10, corrida en vacío con modelo 0D del tubo en `calibracion/`; no se toca el motor para eso (§5, opción a).
+- Decisión 11, se agrega `horno.modo = "medido"` al motor (§5).
 
 ## 1. Para qué es
 
@@ -73,13 +78,11 @@ Al final pesar el biochar: comparación gruesa con el 24.22 % del caso base.
 ## 5. Cómo se ajusta
 - Script en `calibracion/` (rama `ensayo-termico`), solo con la interfaz pública: `cargar_parametros`, `simular`, `simular_lote`.
 - Mínimos cuadrados (scipy `least_squares`) sobre RMS de T_pared y T_centro en los tramos de §4. Corridas pesadas en la Terminal de macOS con el `.venv`.
-- Corrida 1: el motor necesita un lecho. Dos opciones (Nick decide, ver PROPUESTA en la bitácora):
-  - (a) Modelo 0D del tubo en el script de calibración (C_tubo·dT_pared/dt = h_ext·A·(T_horno − T_pared), con el mismo h_ext del motor). No toca el motor.
-  - (b) Agregar al motor un modo "tubo vacío".
-- Corrida 2: mejor con T_horno medido como entrada (separa horno de tubo). Hoy el motor solo tiene `horno.modo` = ideal o físico. Opción: agregar `horno.modo = "medido"` (lee T_horno(t) del CSV). También va como PROPUESTA.
+- Corrida 1 (decisión 10): modelo 0D del tubo en el script de calibración (C_tubo·dT_pared/dt = h_ext·A·(T_horno − T_pared), con el mismo h_ext del motor). No toca el motor.
+- Corrida 2 (decisión 11): T_horno medido como entrada (separa horno de tubo), con `horno.modo = "medido"` (lee T_horno(t) del CSV).
 
-## 6. Criterio de cierre de B (propuesta, Nick aprueba)
-- Corrida 1: RMS T_pared ≤ 5 K y RMS T_horno ≤ 5 K.
+## 6. Criterio de cierre de B (aprobado, decisión 9)
+- Corrida 1: RMS T_pared ≤ 5 K. (RMS T_horno se reporta, pero no entra al criterio aprobado.)
 - Corrida 2: RMS T_pared ≤ 5 K; RMS T_centro ≤ 10 K fuera del tramo de pirólisis y ≤ 20 K en él.
 - Todos los valores calibrados pasan a `base.toml` con etiqueta [Medido/Calibrado], fuente = archivo de la corrida y rango del ajuste.
 - Validación (opcional, recomendada): una corrida 3 a 20 °C/min que no se usa para ajustar. Responde además cuánto pesa la rampa en el horno real.
