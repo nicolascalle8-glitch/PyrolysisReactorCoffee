@@ -35,6 +35,7 @@ UNIDADES = {
     "control.t_ciclo": "s",
     "control.t_muestreo": "s",
     "horno.modo": "-",
+    "horno.archivo_medido": "-",
     "horno.tau_piedra": "s",
     "horno.P_max": "W",
     "horno.C_h": "J/K",
@@ -83,6 +84,7 @@ UNIDADES = {
     "secado.T_umbral": "K",
 }
 ENTEROS = ("malla.Nr_lecho", "malla.Nr_acero", "malla.Nz")
+TEXTOS = ("horno.archivo_medido",)  # texto libre, sin lista de opciones
 
 
 class ErrorParametro(ValueError):
@@ -149,6 +151,10 @@ def _validar(datos: dict[str, Parametro]) -> None:
             raise ErrorParametro(f"{clave}: unidad '{d.unidad}' no es la esperada '{UNIDADES[clave]}'")
         if d.etiqueta not in ETIQUETAS:
             raise ErrorParametro(f"{clave}: etiqueta '{d.etiqueta}' no válida; opciones {ETIQUETAS}")
+        if clave in TEXTOS:
+            if not isinstance(d.valor, str):
+                raise ErrorParametro(f"{clave}: debe ser texto (ruta del CSV), no {d.valor!r}")
+            continue
         if d.opciones:
             if d.valor not in d.opciones:
                 raise ErrorParametro(f"{clave}: '{d.valor}' no es una opción válida {d.opciones}")
@@ -174,6 +180,8 @@ def _validar(datos: dict[str, Parametro]) -> None:
         raise ErrorParametro(
             f"lecho: la composición (base seca) suma {suma:.3f} %, no 100 %. "
             "Ajusta lecho.otros = 100 − (celulosa + hemicelulosa + lignina + lipidos + cenizas)")
+    if datos["horno.modo"].valor == "medido" and not datos["horno.archivo_medido"].valor.strip():
+        raise ErrorParametro("horno.archivo_medido: horno.modo = 'medido' necesita la ruta del CSV con T_horno(t)")
 
 
 def cargar_parametros(ruta: str, cambios: dict | None = None) -> Parametros:

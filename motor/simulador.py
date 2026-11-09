@@ -6,7 +6,8 @@ Un paso dt:
     la energía del paso.
  2. Horno: modo ideal = retardo al setpoint (antes de la conducción, como legacy); modo físico = balance
     de energía del horno con el calor real que salió hacia el tubo en este paso (después de la conducción),
-    así horno y tubo intercambian exactamente la misma energía.
+    así horno y tubo intercambian exactamente la misma energía; modo medido = T_horno leída del CSV al final
+    del paso (entrada prescrita, sin PID ni balance del horno) y la corrida dura lo que dura el CSV.
  3. Conducción implícita (lecho + acero) con k y ρcp del paso anterior; h_ext = h_c + h_rad linealizada.
  4. Química con Tⁿ⁺¹: RAC + TGL y secado, integración exacta; el calor de reacción ajusta T (ΔT = q·dt/ρcp).
  5. Control de dt (spec §5.5): si algún nodo cambia más de numerica.dT_max o la conversión más de
@@ -24,7 +25,7 @@ import numpy as np
 from .cinetica import CineticaRAC, paso_secado
 from .conduccion import paso_conduccion
 from .control import PID, SSR, Programa
-from .horno import HornoFisico, HornoIdeal
+from .horno import HornoFisico, HornoIdeal, HornoMedido
 from .malla import crear_malla
 from .propiedades import coeficientes, cp_lecho, k_lecho, rho_lecho
 from .resultados import Resultado
@@ -84,8 +85,14 @@ class Simulacion:
         self.R_extra = np.full(Nz, p["lecho.R_contacto_extra"])
         self.h_c, self.eps = p["horno.h_c"], p["horno.emisividad"]
         self.fisico = p["horno.modo"] == "fisico"
-        self.horno = (HornoFisico(p["horno.C_h"], p["horno.UA_p"], p["horno.T_amb"] + C_A_K)
-                      if self.fisico else HornoIdeal(p["horno.tau_piedra"]))
+        self.medido = p["horno.modo"] == "medido"
+        if self.medido:
+            self.horno = HornoMedido(p["horno.archivo_medido"])
+        elif self.fisico:
+            self.horno = HornoFisico(p["horno.C_h"], p["horno.UA_p"], p["horno.T_amb"] + C_A_K)
+        else:
+            self.horno = HornoIdeal(p["horno.tau_piedra"])
+        self.t_fin = self.horno.t_fin if self.medido else self.prog.t_total
         self.pid = PID(p["control.Kp"], p["control.Ki"], p["control.Kd"], p["control.t_muestreo"])
         self.ssr = SSR(p["control.modo_ssr"], p["control.t_ciclo"])
         self.P_max = p["horno.P_max"]
@@ -95,11 +102,15 @@ class Simulacion:
         self.coef = coeficientes(p)
         self.secado = {c: p[f"secado.{c}"] for c in ("A", "Ea", "dH", "T_umbral")}
 
-        T0 = self.prog.T_ini
+        T0 = self.horno.temperatura(0.0) if self.medido else self.prog.T_ini
+        u0 = self.horno.salida(0.0) if self.medido else 0.0
         self.e = _Estado(t=0.0, T=np.full(m.forma, T0), especies=especies,
-                         agua=np.full((Nl, Nz), self.rho_agua0), T_h=T0, T_tc=T0, T_set=T0, u=0.0,
+                         agua=np.full((Nl, Nz), self.rho_agua0), T_h=T0, T_tc=T0, T_set=self._T_set(0.0), u=u0,
                          lib={"bio_oil": 0.0, "gas": 0.0, "agua_rxn": 0.0, "evap": 0.0},
                          E_ext=0.0, E_rxn=0.0, err_E=0.0, E_abs=0.0)
+
+    def _T_set(self, t):
+        return self.horno.setpoint(t) if self.medido else self.prog.setpoint(t)
 
     # ---------------------------------------------------------------- propiedades
     def _propiedades(self, e):
@@ -122,6 +133,8 @@ class Simulacion:
         if self.fisico:
             e.u = self.pid.calcular(t, self.prog.setpoint(t), e.T_tc)
             P = self.ssr.energia(t, t + dt, e.u, self.P_max) / dt
+        elif self.medido:
+            e.T_h, T_set, e.u = self.horno.temperatura(t + dt), self.horno.setpoint(t + dt), self.horno.salida(t + dt)
         else:
             e.T_h = self.horno.paso(e.T_h, T_set, dt)
         k, rc, conv0 = self._propiedades(e)
@@ -178,7 +191,7 @@ class Simulacion:
     def ejecutar(self, dt_fijo=None):
         p = self.p
         e = self.e
-        t_fin = self.prog.t_total
+        t_fin = self.t_fin
         t_reg = p["numerica.t_registro"]
         hist = {c: [] for c in ("t", "T_horno", "T_set", "T_pared", "T_lecho_superficie", "T_centro",
                                 "T_termopar_control", "masa_residual", "u")}
@@ -193,7 +206,7 @@ class Simulacion:
             err_masa = max(err_masa, abs(sum(r.values()) - 100.0))
             err_E = max(err_E, 100.0 * abs(e.err_E) / max(e.E_abs, 1e-30))
             T = e.T - C_A_K
-            hist["t"].append(e.t / 60.0); hist["T_horno"].append(e.T_h - C_A_K); hist["T_set"].append(self.prog.setpoint(e.t) - C_A_K)
+            hist["t"].append(e.t / 60.0); hist["T_horno"].append(e.T_h - C_A_K); hist["T_set"].append(self._T_set(e.t) - C_A_K)
             hist["T_pared"].append(T[-1, self.mid]); hist["T_lecho_superficie"].append(T[self.Nl - 1, self.mid])
             hist["T_centro"].append(T[0, self.mid]); hist["T_termopar_control"].append(e.T_tc - C_A_K)
             hist["masa_residual"].append(residual); hist["u"].append(e.u)

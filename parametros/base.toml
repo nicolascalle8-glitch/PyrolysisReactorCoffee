@@ -89,8 +89,14 @@ max      = 60
 valor    = "ideal"
 unidad   = "-"
 etiqueta = "Supuesto"
-fuente   = "ideal = retardo de primer orden al setpoint (como legacy); fisico = balance de energía con PID y SSR"
-opciones = ["ideal", "fisico"]
+fuente   = "ideal = retardo de primer orden al setpoint (como legacy); fisico = balance de energía con PID y SSR; medido = T_horno(t) leída del CSV de horno.archivo_medido (spec de B §5)"
+opciones = ["ideal", "fisico", "medido"]
+
+[horno.archivo_medido]
+valor    = ""
+unidad   = "-"
+etiqueta = "Dato"
+fuente   = "Ruta del CSV de la corrida (t_s, T_horno_C; opcionales T_set_C, u_ssr_pct). Solo se usa con horno.modo = medido"
 
 [horno.tau_piedra]
 valor    = 200.0

@@ -13,7 +13,8 @@ Corrida 2 (café), decisión 11: motor en horno.modo = "medido", con h_c y ε fi
 Uso del motor: solo la interfaz pública (cargar_parametros, simular, simular_lote).
 C_tubo y A salen de la geometría de base.toml: hay que poner la medida real antes de ajustar (spec §3.1).
 La incertidumbre (sigma, correlación) sale del jacobiano: supone ruido independiente, así que con error de
-modelo real es optimista.
+modelo real es optimista. En la corrida 2, "sigma" suma además la incertidumbre de h_c y ε (propagación lineal);
+"sigma_ajuste" y las correlaciones son solo del ajuste.
 
 En la Terminal de macOS (uso real):
   .venv/bin/python calibracion/ajuste_termico.py --corrida1 c1.csv --corrida2 c2.csv --salida carpeta
@@ -41,12 +42,17 @@ C_A_K = 273.15
 T_PIROLISIS = 200.0      # °C, spec §4: desde aquí no se ajusta
 MARGEN_MESETA = 5.0      # K bajo T_máx del horno: de aquí en adelante empieza el enfriamiento
 VENTANA_SUAVIZADO = 31   # muestras, solo para ubicar los tramos (no toca los datos del ajuste)
-RMS_PARED, RMS_CENTRO_FUERA, RMS_CENTRO_PIROLISIS = 5.0, 10.0, 20.0  # K, decisión 9
+RMS_PARED, RMS_HORNO, RMS_CENTRO_FUERA, RMS_CENTRO_PIROLISIS = 5.0, 5.0, 10.0, 20.0  # K, decisión 9
 CORRELACION_ALTA = 0.9   # |corr(R_contacto, k)| mayor que esto: dejar R_contacto fijo (spec §4)
 
 # Numérica del motor durante el ajuste. Con caras z adiabáticas y T_horno uniforme la solución no depende de z,
-# así que 3 nodos axiales dan lo mismo que 20 y corren ~7 veces más rápido.
-NUMERICA_AJUSTE = {"malla.Nz": 3, "numerica.t_registro": 10.0}
+# así que 3 nodos axiales dan lo mismo que 20 y corren ~7 veces más rápido. El paso de tiempo sí importa: con los
+# valores de base.toml (dt_max = 20 s) el ajuste sintético sesgaba k y R_contacto hasta −34 %.
+NUMERICA_AJUSTE = {"malla.Nz": 3, "numerica.t_registro": 10.0, "numerica.dt0": 1.0, "numerica.dt_max": 2.0,
+                   "numerica.dT_max": 1.0, "numerica.dX_max": 0.02}
+TOL_INICIO = 5.0         # K, diferencia máxima entre T_pared o T_centro y T_horno al arrancar
+ANCHO_MESETA = 2.0       # K, ancho de las clases para ubicar la T de meseta
+PASOS_FIJOS = {"horno.h_c": 1.0, "horno.emisividad": 0.02}   # pasos de la derivada respecto a los parámetros fijos
 
 
 # ------------------------------------------------------------------ datos
@@ -75,6 +81,30 @@ def leer_ensayo(ruta, requeridas):
     return datos
 
 
+def _inicio_enfriamiento(ens, horno):
+    """Último registro antes del enfriamiento libre: el último con SSR encendido; sin u_ssr_pct, el último cerca de la meseta.
+
+    La T de meseta es la clase más poblada de la mitad alta del registro, no el máximo: así un sobrepaso no la mueve.
+    """
+    u = ens.get("u_ssr_pct")
+    if u is not None and np.any(u > 0.0):
+        return int(np.nonzero(u > 0.0)[0][-1])
+    arriba = horno[horno >= 0.5 * (horno.min() + horno.max())]
+    cuentas, bordes = np.histogram(arriba, bins=np.arange(arriba.min(), arriba.max() + ANCHO_MESETA, ANCHO_MESETA))
+    k = int(np.argmax(cuentas))
+    return int(np.nonzero(horno >= 0.5 * (bordes[k] + bordes[k + 1]) - MARGEN_MESETA)[0][-1])
+
+
+def verificar_inicio(ens):
+    """El motor arranca todo a T_horno(0): rechaza corridas donde pared o centro empiezan a otra temperatura."""
+    T_h0 = float(np.mean(ens["T_horno_C"][:5]))
+    for c in ("T_pared_C", "T_centro_C"):
+        T0 = float(np.mean(ens[c][:5]))
+        if abs(T0 - T_h0) > TOL_INICIO:
+            raise ValueError(f"{c} arranca en {T0:.1f} °C y T_horno en {T_h0:.1f} °C (diferencia mayor que {TOL_INICIO} K): "
+                             "el modelo supone tubo y lecho a T_horno(0); repetir la corrida desde el equilibrio")
+
+
 def tramos(ens):
     """Separa la corrida 2 (spec §4): virgen (T_pared ≤ 200 °C al subir), enfriamiento y pirólisis (lo demás)."""
     pared = uniform_filter1d(ens["T_pared_C"], VENTANA_SUAVIZADO, mode="nearest")
@@ -84,7 +114,7 @@ def tramos(ens):
     sobre = np.nonzero(pared[:i_max + 1] > T_PIROLISIS)[0]
     if sobre.size == 0:
         raise ValueError(f"La corrida nunca pasa de {T_PIROLISIS} °C en la pared")
-    i_enf = int(np.nonzero(horno >= horno[i_max] - MARGEN_MESETA)[0][-1])
+    i_enf = _inicio_enfriamiento(ens, horno)
     virgen = np.arange(n) < sobre[0]
     enfriamiento = np.arange(n) > i_enf
     if virgen.sum() < 60 or enfriamiento.sum() < 60:
@@ -109,6 +139,17 @@ def _incertidumbre(J, r, nombres):
     corr = np.divide(cov_s, divisor, out=np.zeros_like(cov_s), where=divisor > 0.0)
     return ({c: float(s) for c, s in zip(nombres, sig_s / escala)},
             {a: {b: float(corr[i, j]) for j, b in enumerate(nombres)} for i, a in enumerate(nombres)})
+
+
+def sigma_con_fijos(J, cov_ajuste, J_fijos, cov_fijos):
+    """Sigma del ajuste sumando la incertidumbre de parámetros fijos θ: dx/dθ = −J⁺·J_θ (propagación lineal)."""
+    S = -np.linalg.lstsq(J, J_fijos, rcond=None)[0]
+    return np.sqrt(np.maximum(np.diag(cov_ajuste + S @ cov_fijos @ S.T), 0.0))
+
+
+def _covarianza(sigma, corr, nombres):
+    s = np.array([sigma[c] for c in nombres])
+    return np.outer(s, s) * np.array([[corr[a][b] for b in nombres] for a in nombres])
 
 
 def _geometria_tubo(p):
@@ -189,11 +230,13 @@ def ajustar_corrida1(ens, p):
 
 
 # ------------------------------------------------------------------ corrida 2: café con el motor
-def ajustar_corrida2(ruta_csv, ens, fijos, base=BASE, ajustar_R=True, procesos=None):
+def ajustar_corrida2(ruta_csv, ens, fijos, base=BASE, ajustar_R=True, procesos=None, incert_fijos=None):
     """Ajusta k_virgen_0, k_char_0 y (opcional) R_contacto_extra con el motor en modo medido.
 
     fijos: {"horno.h_c": …, "horno.emisividad": …} de la corrida 1. El simulador corre completo en cada evaluación.
+    incert_fijos: {"sigma": …, "corr": …} de esos fijos; si viene, "sigma" incluye su efecto y "sigma_ajuste" no.
     """
+    verificar_inicio(ens)
     if not os.path.isabs(ruta_csv):
         ruta_csv = os.path.abspath(ruta_csv)
     nombres = ["lecho.k_virgen_0", "lecho.k_char_0"] + (["lecho.R_contacto_extra"] if ajustar_R else [])
@@ -210,8 +253,8 @@ def ajustar_corrida2(ruta_csv, ens, fijos, base=BASE, ajustar_R=True, procesos=N
     bloques = tramos(ens)
     ajuste = bloques["virgen"] | bloques["enfriamiento"]
 
-    def caso(x):
-        return cargar_parametros(base, {**base_cambios, **dict(zip(nombres, map(float, x)))})
+    def caso(x, extra=None):
+        return cargar_parametros(base, {**base_cambios, **dict(zip(nombres, map(float, x))), **(extra or {})})
 
     def perfiles(res):
         h = res.historia
@@ -244,12 +287,27 @@ def ajustar_corrida2(ruta_csv, ens, fijos, base=BASE, ajustar_R=True, procesos=N
 
     sol = least_squares(f, x0, jac=jac, bounds=(inf, sup), x_scale=x_escala, xtol=1e-3, ftol=1e-4, max_nfev=20)
     sigma, corr = _incertidumbre(sol.jac, sol.fun, nombres)
+    sigma_ajuste = sigma
+    if incert_fijos:
+        n_fijos = list(fijos)
+        pasos = [PASOS_FIJOS[c] if fijos[c] + PASOS_FIJOS[c] <= 1.0 or c != "horno.emisividad" else -PASOS_FIJOS[c]
+                 for c in n_fijos]
+        lote = simular_lote([caso(sol.x, {c: fijos[c] + h}) for c, h in zip(n_fijos, pasos)],
+                            procesos=procesos or min(len(n_fijos), os.cpu_count() or 1))
+        for r in lote:
+            if isinstance(r, Exception):
+                raise r
+        r0 = f(sol.x)
+        J_fijos = np.column_stack([(residuo(r) - r0) / h for r, h in zip(lote, pasos)])
+        s_total = sigma_con_fijos(sol.jac, _covarianza(sigma, corr, nombres), J_fijos,
+                                  _covarianza(incert_fijos["sigma"], incert_fijos["corr"], n_fijos))
+        sigma = {c: float(s) for c, s in zip(nombres, s_total)}
     res_final = simular(caso(sol.x))
     Tp, Tc = perfiles(res_final)
     dp, dc = Tp - ens["T_pared_C"], Tc - ens["T_centro_C"]
     fuera = bloques["virgen"] | bloques["enfriamiento"]
     return {"valores": {c: float(v) for c, v in zip(nombres, sol.x)},
-            "sigma": sigma, "correlacion": corr,
+            "sigma": sigma, "sigma_ajuste": sigma_ajuste, "correlacion": corr,
             "rms": {"T_pared": _rms(dp), "T_centro_fuera_pirolisis": _rms(dc[fuera]),
                     "T_centro_pirolisis": _rms(dc[bloques["pirolisis"]])},
             "tramos_s": {n: [float(t[m][0]), float(t[m][-1])] for n, m in bloques.items()},
@@ -259,8 +317,9 @@ def ajustar_corrida2(ruta_csv, ens, fijos, base=BASE, ajustar_R=True, procesos=N
 
 # ------------------------------------------------------------------ cierre e informe
 def criterio_cierre(c1, c2):
-    """Decisión 9: RMS T_pared ≤ 5 K en las dos corridas; T_centro ≤ 10 K fuera de la pirólisis y ≤ 20 K en ella."""
+    """Decisión 9: RMS T_pared ≤ 5 K (dos corridas); T_horno ≤ 5 K (corrida 1); T_centro ≤ 10 K fuera de la pirólisis y ≤ 20 K en ella."""
     return {"T_pared_corrida1": c1["rms"]["T_pared"] <= RMS_PARED,
+            "T_horno_corrida1": c1["rms"]["T_horno"] <= RMS_HORNO,
             "T_pared_corrida2": c2["rms"]["T_pared"] <= RMS_PARED,
             "T_centro_fuera_pirolisis": c2["rms"]["T_centro_fuera_pirolisis"] <= RMS_CENTRO_FUERA,
             "T_centro_pirolisis": c2["rms"]["T_centro_pirolisis"] <= RMS_CENTRO_PIROLISIS}
@@ -281,7 +340,8 @@ def correr(ruta_c1, ruta_c2, salida, base=BASE, ajustar_R=True):
     c1 = ajustar_corrida1(ens1, p)
     ens2 = leer_ensayo(ruta_c2, ("t_s", "T_horno_C", "T_pared_C", "T_centro_C"))
     fijos = {c: c1["valores"][c] for c in ("horno.h_c", "horno.emisividad")}
-    c2 = ajustar_corrida2(ruta_c2, ens2, fijos, base=base, ajustar_R=ajustar_R)
+    incert = {"sigma": {c: c1["sigma"][c] for c in fijos}, "corr": c1["correlacion"]["tubo"]}
+    c2 = ajustar_corrida2(ruta_c2, ens2, fijos, base=base, ajustar_R=ajustar_R, incert_fijos=incert)
     informe = {"corrida1": c1, "corrida2": c2, "correlacion_R_k": correlacion_R_k(c2),
                "criterio_cierre": criterio_cierre(c1, c2)}
     os.makedirs(salida, exist_ok=True)

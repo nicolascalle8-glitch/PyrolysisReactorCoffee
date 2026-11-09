@@ -8,8 +8,10 @@ Corrida 1 (tubo vacío): el motor no tiene tubo vacío (decisión 10), así que 
   conducción 2D en el acero (paso_conduccion, con los nodos del lecho sin masa ni conducción), HornoFisico, PID, SSR y
   termopar de control. Programa del spec §4 sin salida manual: rampa 10 °C/min a 550 °C con PID, 20 min de meseta y
   enfriamiento libre con el SSR apagado. El ajuste usa un modelo 0D distinto al que genera los datos.
-Corrida 2 (café): motor en modo medido con T_horno(t) prescrita (rampa, meseta, enfriamiento exponencial), con malla y
-  pasos más finos que los del ajuste, para que el ajuste no use exactamente el mismo modelo numérico que generó los datos.
+Corrida 2 (café): motor en modo medido con T_horno(t) prescrita (rampa, meseta, enfriamiento exponencial), con malla
+  más fina que la del ajuste, para que el ajuste no use exactamente el mismo modelo numérico que generó los datos.
+
+Sale con código 0 solo si todo parámetro queda dentro de TOL_PCT y se cumple el criterio de cierre (decisión 9).
 
 En la Terminal de macOS:
   .venv/bin/python calibracion/sintetico.py
@@ -39,6 +41,9 @@ from motor.termopar import Termopar  # noqa: E402
 # (P_max/C_h = 12.5 K/min, UA_p·ΔT = 1575 W a 550 °C). No son propiedades del horno real.
 VERDAD = {"horno.C_h": 12000.0, "horno.UA_p": 3.0, "horno.h_c": 35.0, "horno.emisividad": 0.6,
           "lecho.k_virgen_0": 0.15, "lecho.k_char_0": 0.11, "lecho.R_contacto_extra": 0.015}
+# Tolerancia de esta prueba del software, no del spec (§6 solo pone límites de RMS). R_contacto es débil (spec §4).
+TOL_PCT = {"horno.C_h": 5.0, "horno.UA_p": 5.0, "horno.h_c": 5.0, "horno.emisividad": 5.0,
+           "lecho.k_virgen_0": 5.0, "lecho.k_char_0": 5.0, "lecho.R_contacto_extra": 20.0}
 RUIDO_K = 1.0
 TAU_ENFRIAMIENTO = 4000.0   # s, solo para la T_horno prescrita de la corrida 2
 NUMERICA_FINA = {"malla.Nr_lecho": 28, "malla.Nr_acero": 6, "malla.Nz": 5, "numerica.dt0": 1.0,
@@ -146,21 +151,25 @@ def main(salida=SALIDA):
     filas = tabla(informe)
     informe["verdad"] = VERDAD
     informe["errores_pct"] = {f[0]: f[4] for f in filas}
+    informe["dentro_de_tolerancia"] = {f[0]: abs(f[4]) <= TOL_PCT[f[0]] for f in filas}
+    informe["aprobado"] = all(informe["dentro_de_tolerancia"].values()) and all(informe["criterio_cierre"].values())
     informe["generacion_s"], informe["ajuste_s"] = t1 - t0, t2 - t1
     informe["masa_residual_final_pct"] = masa
     with open(os.path.join(salida, "calibracion.json"), "w", encoding="utf-8") as f:
         json.dump(informe, f, ensure_ascii=False, indent=2)
     print(f"corrida 1: {n1} registros. Generación {t1 - t0:.0f} s, ajuste {t2 - t1:.0f} s.")
-    print(f"{'parámetro':28s}{'verdad':>12s}{'recuperado':>13s}{'sigma':>11s}{'error %':>10s}")
+    print(f"{'parámetro':28s}{'verdad':>12s}{'recuperado':>13s}{'sigma':>11s}{'error %':>10s}{'tol %':>7s}  dentro")
     for c, v, r, s, e in filas:
-        print(f"{c:28s}{v:12.5g}{r:13.5g}{(s if s is not None else float('nan')):11.2g}{e:10.2f}")
+        print(f"{c:28s}{v:12.5g}{r:13.5g}{(s if s is not None else float('nan')):11.2g}{e:10.2f}{TOL_PCT[c]:7.1f}"
+              f"  {informe['dentro_de_tolerancia'][c]}")
     print("RMS corrida 1:", informe["corrida1"]["rms"])
     print("RMS corrida 2:", informe["corrida2"]["rms"])
     print("Correlación R_contacto–k:", informe["correlacion_R_k"])
     print("Criterio de cierre:", informe["criterio_cierre"])
+    print("APROBADO:", informe["aprobado"])
     print("Resultado en", salida)
     return informe
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(0 if main()["aprobado"] else 1)

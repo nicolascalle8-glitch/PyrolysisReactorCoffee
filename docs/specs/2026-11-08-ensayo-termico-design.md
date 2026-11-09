@@ -3,7 +3,7 @@
 Fecha: 2026-11-08 (Bogotá). Estado: **aprobado por Nick el 2026-11-09 08:40** (decisiones 9–11 del CONTEXTO). Base: spec del motor §6 y §11, `parametros/base.toml` (main, ed907cf).
 
 **Aprobaciones:**
-- Decisión 9, criterio de cierre: RMS T_pared ≤ 5 K (las dos corridas); RMS T_centro ≤ 10 K fuera de la pirólisis y ≤ 20 K en ella (§6).
+- Decisión 9, criterio de cierre: RMS T_pared ≤ 5 K (las dos corridas); RMS T_horno ≤ 5 K (corrida 1; agregado por Nick el 2026-11-09 09:36); RMS T_centro ≤ 10 K fuera de la pirólisis y ≤ 20 K en ella (§6).
 - Decisión 10, corrida en vacío con modelo 0D del tubo en `calibracion/`; no se toca el motor para eso (§5, opción a).
 - Decisión 11, se agrega `horno.modo = "medido"` al motor (§5).
 
@@ -82,7 +82,7 @@ Al final pesar el biochar: comparación gruesa con el 24.22 % del caso base.
 - Corrida 2 (decisión 11): T_horno medido como entrada (separa horno de tubo), con `horno.modo = "medido"` (lee T_horno(t) del CSV).
 
 ## 6. Criterio de cierre de B (aprobado, decisión 9)
-- Corrida 1: RMS T_pared ≤ 5 K. (RMS T_horno se reporta, pero no entra al criterio aprobado.)
+- Corrida 1: RMS T_pared ≤ 5 K y RMS T_horno ≤ 5 K. (RMS T_horno entra al criterio por decisión de Nick del 2026-11-09 09:36: es lo único que comprueba C_h y UA_p, la base para sintonizar el PID en C.)
 - Corrida 2: RMS T_pared ≤ 5 K; RMS T_centro ≤ 10 K fuera del tramo de pirólisis y ≤ 20 K en él.
 - Todos los valores calibrados pasan a `base.toml` con etiqueta [Medido/Calibrado], fuente = archivo de la corrida y rango del ajuste.
 - Validación (opcional, recomendada): una corrida 3 a 20 °C/min que no se usa para ajustar. Responde además cuánto pesa la rampa en el horno real.
