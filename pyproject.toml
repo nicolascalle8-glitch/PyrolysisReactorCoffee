@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pirolisis-cafe"
+version = "0.1.0"
+description = "Motor 2D (r, z) del reactor vertical de pirólisis de residuo de café"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "tomli; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+pruebas = ["pytest"]
+
+[tool.setuptools.packages.find]
+include = ["motor*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["lento: pruebas largas (caso base completo, velocidad, convergencia)"]
