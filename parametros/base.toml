@@ -1,0 +1,379 @@
+# Caso base del motor nuevo. Cada parámetro: valor, unidad, etiqueta, fuente, rango [min, max].
+# Etiquetas: Dato | Medido | Norma | Supuesto | Calculado | Por validar (shared/CONTRATO-OPERATIVO.md).
+# Composición del lecho en % base seca: celulosa + hemicelulosa + lignina + lipidos + otros + cenizas = 100.
+# Humedad en % base húmeda. Temperaturas del programa en °C (el motor trabaja en K por dentro).
+
+# ---------------- programa ----------------
+[programa.T_inicial]
+valor    = 25.0
+unidad   = "°C"
+etiqueta = "Supuesto"
+fuente   = "legacy simulador_interactivo.py (T_ini = 25 °C)"
+min      = 0
+max      = 60
+
+[programa.rampa]
+valor    = 10.0
+unidad   = "°C/min"
+etiqueta = "Supuesto"
+fuente   = "Caso base del informe docs/EVALUACION_CINETICAS.md"
+min      = 0.1
+max      = 100
+
+[programa.T_final]
+valor    = 500.0
+unidad   = "°C"
+etiqueta = "Supuesto"
+fuente   = "Caso base del informe docs/EVALUACION_CINETICAS.md"
+min      = 30
+max      = 900
+
+[programa.meseta]
+valor    = 30.0
+unidad   = "min"
+etiqueta = "Supuesto"
+fuente   = "Caso base del informe docs/EVALUACION_CINETICAS.md"
+min      = 0
+max      = 600
+
+# ---------------- control ----------------
+[control.modo_ssr]
+valor    = "promedio"
+unidad   = "-"
+etiqueta = "Supuesto"
+fuente   = "promedio = potencia media u·P_max; onoff = ventana de tiempo del SSR"
+opciones = ["promedio", "onoff"]
+
+[control.Kp]
+valor    = 0.02
+unidad   = "1/K"
+etiqueta = "Por validar"
+fuente   = "Valor de arranque sin fuente; se define con el manual MC-5438 y la sintonía (B/C)"
+min      = 0
+max      = 100
+
+[control.Ki]
+valor    = 0.0001
+unidad   = "1/(K·s)"
+etiqueta = "Por validar"
+fuente   = "Valor de arranque sin fuente; manual MC-5438"
+min      = 0
+max      = 10
+
+[control.Kd]
+valor    = 0.0
+unidad   = "s/K"
+etiqueta = "Por validar"
+fuente   = "Valor de arranque sin fuente; manual MC-5438"
+min      = 0
+max      = 1000
+
+[control.t_ciclo]
+valor    = 2.0
+unidad   = "s"
+etiqueta = "Por validar"
+fuente   = "Tiempo de ciclo del SSR; manual MC-5438"
+min      = 0.1
+max      = 120
+
+[control.t_muestreo]
+valor    = 1.0
+unidad   = "s"
+etiqueta = "Por validar"
+fuente   = "Muestreo del controlador; manual MC-5438"
+min      = 0.05
+max      = 60
+
+# ---------------- horno ----------------
+[horno.modo]
+valor    = "ideal"
+unidad   = "-"
+etiqueta = "Supuesto"
+fuente   = "ideal = retardo de primer orden al setpoint (como legacy); fisico = balance de energía con PID y SSR"
+opciones = ["ideal", "fisico"]
+
+[horno.tau_piedra]
+valor    = 200.0
+unidad   = "s"
+etiqueta = "Supuesto"
+fuente   = "legacy simulador_interactivo.py (tau_stone)"
+min      = 10
+max      = 5000
+
+[horno.P_max]
+valor    = 2500.0
+unidad   = "W"
+etiqueta = "Supuesto"
+fuente   = "legacy python/config.py, sin fuente"
+min      = 500
+max      = 5000
+
+[horno.C_h]
+valor    = 20000.0
+unidad   = "J/K"
+etiqueta = "Por validar"
+fuente   = "Valor de arranque sin fuente; se calibra en el subproyecto B"
+min      = 100
+max      = 10000000.0
+
+[horno.UA_p]
+valor    = 5.0
+unidad   = "W/K"
+etiqueta = "Por validar"
+fuente   = "Valor de arranque sin fuente; se calibra en el subproyecto B"
+min      = 0
+max      = 500
+
+[horno.h_c]
+valor    = 90.0
+unidad   = "W/(m²·K)"
+etiqueta = "Supuesto"
+fuente   = "legacy h_comb (coeficiente combinado horno–tubo, sin fuente)"
+min      = 0
+max      = 1000
+
+[horno.emisividad]
+valor    = 0.0
+unidad   = "-"
+etiqueta = "Por validar"
+fuente   = "0 = la radiación ya va dentro de h_c (como legacy); se calibra en B"
+min      = 0
+max      = 1
+
+[horno.T_amb]
+valor    = 25.0
+unidad   = "°C"
+etiqueta = "Supuesto"
+fuente   = "Ambiente del laboratorio, sin medir"
+min      = 0
+max      = 45
+
+# ---------------- geometria ----------------
+[geometria.R_lecho]
+valor    = 0.025
+unidad   = "m"
+etiqueta = "Supuesto"
+fuente   = "legacy (radio de la canastilla 25 mm)"
+min      = 0.005
+max      = 0.1
+
+[geometria.e_acero]
+valor    = 0.0025
+unidad   = "m"
+etiqueta = "Supuesto"
+fuente   = "legacy (espesor del tubo 2.5 mm)"
+min      = 0.0005
+max      = 0.01
+
+[geometria.L]
+valor    = 0.2
+unidad   = "m"
+etiqueta = "Supuesto"
+fuente   = "legacy (altura 20 cm)"
+min      = 0.02
+max      = 1.0
+
+# ---------------- malla ----------------
+[malla.Nr_lecho]
+valor    = 14
+unidad   = "-"
+etiqueta = "Supuesto"
+fuente   = "legacy; se revisa con el estudio de malla (prueba 5)"
+min      = 3
+max      = 80
+
+[malla.Nr_acero]
+valor    = 4
+unidad   = "-"
+etiqueta = "Supuesto"
+fuente   = "legacy"
+min      = 1
+max      = 20
+
+[malla.Nz]
+valor    = 20
+unidad   = "-"
+etiqueta = "Supuesto"
+fuente   = "legacy"
+min      = 2
+max      = 200
+
+# ---------------- lecho ----------------
+[lecho.rho_aparente]
+valor    = 380.0
+unidad   = "kg/m³"
+etiqueta = "Supuesto"
+fuente   = "legacy (rho_bulk), sin fuente"
+min      = 100
+max      = 1000
+
+[lecho.humedad]
+valor    = 8.0
+unidad   = "%"
+etiqueta = "Supuesto"
+fuente   = "legacy (café acondicionado); el GIEM midió 61.2 % bh en fresco (28ago2604)"
+min      = 0
+max      = 70
+
+[lecho.cenizas]
+valor    = 2.31
+unidad   = "%"
+etiqueta = "Dato"
+fuente   = "GIEM 28ago2604, base seca"
+min      = 0
+max      = 20
+
+[lecho.celulosa]
+valor    = 12.0
+unidad   = "%"
+etiqueta = "Supuesto"
+fuente   = "Sin fuente (no está en el reporte GIEM); legacy COMPOSICION_SCG"
+min      = 0
+max      = 100
+
+[lecho.hemicelulosa]
+valor    = 35.0
+unidad   = "%"
+etiqueta = "Supuesto"
+fuente   = "Sin fuente (no está en el reporte GIEM); legacy COMPOSICION_SCG"
+min      = 0
+max      = 100
+
+[lecho.lignina]
+valor    = 28.0
+unidad   = "%"
+etiqueta = "Supuesto"
+fuente   = "Sin fuente (no está en el reporte GIEM); legacy COMPOSICION_SCG"
+min      = 0
+max      = 100
+
+[lecho.lipidos]
+valor    = 15.0
+unidad   = "%"
+etiqueta = "Supuesto"
+fuente   = "Sin fuente (no está en el reporte GIEM); legacy COMPOSICION_SCG"
+min      = 0
+max      = 100
+
+[lecho.otros]
+valor    = 7.69
+unidad   = "%"
+etiqueta = "Calculado"
+fuente   = "100 − (celulosa + hemicelulosa + lignina + lípidos + cenizas); se reparte en proporción (legacy)"
+min      = 0
+max      = 100
+
+[lecho.R_contacto_extra]
+valor    = 0.003
+unidad   = "m²·K/W"
+etiqueta = "Supuesto"
+fuente   = "legacy (resistencia de contacto canastilla–tubo), sin fuente"
+min      = 0
+max      = 0.1
+
+# ---------------- acero ----------------
+[acero.rho]
+valor    = 7900.0
+unidad   = "kg/m³"
+etiqueta = "Supuesto"
+fuente   = "legacy (acero inoxidable), sin fuente citada"
+min      = 7000
+max      = 8500
+
+[acero.cp]
+valor    = 500.0
+unidad   = "J/(kg·K)"
+etiqueta = "Supuesto"
+fuente   = "legacy (acero inoxidable), sin fuente citada"
+min      = 300
+max      = 800
+
+[acero.k]
+valor    = 16.3
+unidad   = "W/(m·K)"
+etiqueta = "Supuesto"
+fuente   = "legacy (acero inoxidable), sin fuente citada"
+min      = 5
+max      = 60
+
+# ---------------- cinetica ----------------
+[cinetica.regimen]
+valor    = "lecho_fijo"
+unidad   = "-"
+etiqueta = "Supuesto"
+fuente   = "Parámetros x de carbonización secundaria del esquema RAC 2017 (lecho_fijo = canastilla, rampa lenta)"
+opciones = ["lecho_fijo", "rapida"]
+
+[cinetica.acetilos_hce]
+valor    = 0.1
+unidad   = "mol/mol"
+etiqueta = "Supuesto"
+fuente   = "RAC: 0.1 madera blanda; café poco acetilado (legacy kinetics_rac.py)"
+min      = 0
+max      = 1
+
+# ---------------- termopares ----------------
+[termopares.control_r]
+valor    = 0.0275
+unidad   = "m"
+etiqueta = "Supuesto"
+fuente   = "Termopar de control en la cara externa del tubo (lado del horno); se usa el nodo más cercano"
+min      = 0
+max      = 0.2
+
+[termopares.control_z]
+valor    = 0.1
+unidad   = "m"
+etiqueta = "Supuesto"
+fuente   = "Media altura del lecho; nodo más cercano"
+min      = 0
+max      = 1.0
+
+[termopares.tau]
+valor    = 10.0
+unidad   = "s"
+etiqueta = "Supuesto"
+fuente   = "Retardo de termopar tipo K con vaina, sin medir"
+min      = 0.1
+max      = 300
+
+# ---------------- numerica ----------------
+[numerica.dt0]
+valor    = 2.0
+unidad   = "s"
+etiqueta = "Supuesto"
+fuente   = "Plan del motor (Global Constraints)"
+min      = 0.01
+max      = 60
+
+[numerica.dt_max]
+valor    = 20.0
+unidad   = "s"
+etiqueta = "Supuesto"
+fuente   = "Tope del dt adaptativo, sin fuente"
+min      = 0.1
+max      = 600
+
+[numerica.dT_max]
+valor    = 5.0
+unidad   = "K"
+etiqueta = "Supuesto"
+fuente   = "Plan del motor (Global Constraints)"
+min      = 0.1
+max      = 50
+
+[numerica.dX_max]
+valor    = 0.05
+unidad   = "-"
+etiqueta = "Supuesto"
+fuente   = "Plan del motor (Global Constraints)"
+min      = 0.001
+max      = 0.5
+
+[numerica.t_registro]
+valor    = 30.0
+unidad   = "s"
+etiqueta = "Supuesto"
+fuente   = "Intervalo de registro de la historia"
+min      = 1
+max      = 600
