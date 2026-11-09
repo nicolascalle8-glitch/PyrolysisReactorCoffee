@@ -9,9 +9,14 @@ Un paso dt:
     así horno y tubo intercambian exactamente la misma energía.
  3. Conducción implícita (lecho + acero) con k y ρcp del paso anterior; h_ext = h_c + h_rad linealizada.
  4. Química con Tⁿ⁺¹: RAC + TGL y secado, integración exacta; el calor de reacción ajusta T (ΔT = q·dt/ρcp).
- 5. Registro cada numerica.t_registro.
+ 5. Control de dt (spec §5.5): si algún nodo cambia más de numerica.dT_max o la conversión más de
+    numerica.dX_max, se repite el paso con dt/2; si el cambio es menor que la mitad del límite, dt crece ×1.5
+    hasta numerica.dt_max. En SSR onoff con horno físico, dt ≤ t_ciclo. Piso DT_MIN para no quedar en bucle.
+ 6. Registro cada numerica.t_registro.
 Balance de energía por paso: Σ ρcp·V·ΔT = Q_externo + Q_reacción (debe dar ~0 por construcción).
 """
+
+import copy
 
 import numpy as np
 
@@ -27,6 +32,8 @@ from .termopar import Termopar, nodo_mas_cercano
 SIGMA = 5.670374419e-8   # W/(m²·K⁴), Stefan–Boltzmann (CODATA 2018)
 C_A_K = 273.15
 N_MAPAS = 12
+DT_MIN = 1e-2            # s, piso del dt adaptativo (si se llega aquí, el paso se acepta y se cuenta)
+CRECE, REDUCE = 1.5, 0.5
 
 
 class ErrorSimulacion(RuntimeError):
@@ -166,7 +173,8 @@ class Simulacion:
         return r, pct(solido + ceniza + agua)
 
     def ejecutar(self, dt_fijo=None):
-        p, e = self.p, self.e
+        p = self.p
+        e = self.e
         t_fin = self.prog.t_total
         t_reg = p["numerica.t_registro"]
         hist = {c: [] for c in ("t", "T_horno", "T_set", "T_pared", "T_lecho_superficie", "T_centro",
@@ -189,22 +197,45 @@ class Simulacion:
             return r
 
         dt = dt_fijo or p["numerica.dt0"]
+        dt_max = p["numerica.dt_max"]
+        lim_T, lim_X = p["numerica.dT_max"], p["numerica.dX_max"]
+        if self.ssr.modo == "onoff" and self.fisico:
+            dt_max = min(dt_max, self.ssr.t_ciclo)
+            dt = min(dt, dt_max)
+        dT_max_aceptado, en_dt_min = 0.0, 0
         while e.t < t_fin - 1e-9:
             if e.t - ultimo_reg >= t_reg - 1e-9:
                 registrar(); ultimo_reg = e.t
             while t_mapas and e.t >= t_mapas[0] - 1e-9:
                 mapas.append((e.t / 60.0, e.T - C_A_K)); t_mapas.pop(0)
-            h = min(dt, t_fin - e.t)
-            if self.ssr.modo == "onoff" and self.fisico:
-                h = min(h, self.ssr.t_ciclo)
-            self.paso(e, h)
+            if dt_fijo:
+                self.paso(e, min(dt, t_fin - e.t))
+                pasos += 1
+                continue
+            while True:
+                h = min(dt, t_fin - e.t)
+                foto, pid_foto = e.copia(), copy.deepcopy(self.pid)
+                dT, dX = self.paso(e, h)
+                if (dT <= lim_T and dX <= lim_X) or dt <= DT_MIN:
+                    break
+                e, self.pid = foto, pid_foto
+                self.e = e
+                dt = max(dt * REDUCE, DT_MIN)
+            if dT > lim_T or dX > lim_X:
+                en_dt_min += 1
+            else:
+                dT_max_aceptado = max(dT_max_aceptado, dT)
             pasos += 1
+            if dT < 0.5 * lim_T and dX < 0.5 * lim_X:
+                dt = min(dt * CRECE, dt_max)
         r = registrar()
         if not mapas or mapas[-1][0] < e.t / 60.0 - 1e-9:
             mapas.append((e.t / 60.0, e.T - C_A_K))
         res = Resultado(rendimientos=r, historia={c: np.array(v) for c, v in hist.items()}, mapas=mapas,
                         balance_masa=err_masa, balance_energia=err_E, supuestos=p.supuestos(),
                         r_mm=self.m.r * 1e3, z_cm=self.m.z * 1e2, n_lecho=self.Nl, pasos=pasos)
+        if not dt_fijo:
+            res.dT_max_paso, res.pasos_en_dt_min = dT_max_aceptado, en_dt_min
         if not res.confiable:
             res.avisos.append(f"Balance fuera de tolerancia: masa {err_masa:.3g} %, energía {err_E:.3g} %")
         return res

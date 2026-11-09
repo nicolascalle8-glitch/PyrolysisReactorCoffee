@@ -39,9 +39,7 @@ CASOS = {
 
 @pytest.fixture(scope="module")
 def base():
-    # Tarea 8 (dt fijo): con dt = 2 s el paso dividido corre ~0.3 min la exoterma del centro (RMS 13 K);
-    # con dt → 0 converge a RMS ≈ 6 K. Se usa dt0 = 0.25 s hasta que la Tarea 9 meta el dt adaptativo.
-    return simular(cargar_parametros(BASE, {"numerica.dt0": 0.25}))
+    return simular(cargar_parametros(BASE))
 
 
 @pytest.fixture(scope="module")

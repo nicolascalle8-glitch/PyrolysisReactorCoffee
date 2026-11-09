@@ -77,3 +77,34 @@ def test_flujo_interfaz():
         Q_total += Q
     assert Q_total > 0
     assert np.isclose(np.sum(rc * m.V * T) - E0, Q_total, rtol=1e-9)
+
+
+def test_igual_a_spsolve():
+    """La solución de banda es la misma que la del sistema disperso armado nodo a nodo."""
+    from scipy.sparse import lil_matrix
+    from scipy.sparse.linalg import spsolve
+    from motor.conduccion import conductancias
+    p, m, k, rc, T = _caso_con_acero()
+    Rc = np.full(m.forma[1], p["lecho.R_contacto_extra"])
+    h, Th, dt = np.full(m.forma[1], 90.0), 900.0, 5.0
+    T1, _ = paso_conduccion(m, T, k, rc, h, Th, Rc, dt)
+    Nr, Nz = m.forma
+    G_r, G_z = conductancias(m, k, Rc)
+    A = lil_matrix((Nr * Nz, Nr * Nz))
+    b = (rc * m.V / dt * T).ravel()
+    n = lambda i, j: i * Nz + j
+    for i in range(Nr):
+        for j in range(Nz):
+            A[n(i, j), n(i, j)] += rc[i, j] * m.V[i, j] / dt
+            if i + 1 < Nr:
+                for a, c in ((n(i, j), n(i + 1, j)), (n(i + 1, j), n(i, j))):
+                    A[a, a] += G_r[i, j]; A[a, c] -= G_r[i, j]
+            if j + 1 < Nz:
+                for a, c in ((n(i, j), n(i, j + 1)), (n(i, j + 1), n(i, j))):
+                    A[a, a] += G_z[i, j]; A[a, c] -= G_z[i, j]
+    Gext = m.A_r[-1] * m.dz_k * h
+    for j in range(Nz):
+        A[n(Nr - 1, j), n(Nr - 1, j)] += Gext[j]
+        b[n(Nr - 1, j)] += Gext[j] * Th
+    T2 = spsolve(A.tocsc(), b).reshape(Nr, Nz)
+    assert np.allclose(T1, T2, rtol=1e-12, atol=1e-9)

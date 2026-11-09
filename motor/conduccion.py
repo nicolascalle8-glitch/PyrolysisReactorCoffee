@@ -12,12 +12,12 @@ Ecuación (volúmenes finitos, coordenadas cilíndricas, Incropera cap. 4–5):
   G axial   = π (r_e² − r_i²) · k_cara / dz           (caras superior e inferior adiabáticas)
   G_ext     = 2π R_ext·dz_k · h_ext
 En r = 0 el volumen central π(Δr/2)²·dz no tiene cara interna (equivale a L'Hôpital).
-Sistema disperso (scipy.sparse) resuelto con spsolve. La energía se conserva por construcción.
+Sistema disperso de banda (ancho Nz por el orden n = i·Nz + k) resuelto con scipy.linalg.solve_banded,
+que da la misma solución que spsolve y es mucho más rápido para esta malla. La energía se conserva por construcción.
 """
 
 import numpy as np
-from scipy.sparse import csc_matrix
-from scipy.sparse.linalg import spsolve
+from scipy.linalg import solve_banded
 
 
 def _media_armonica(a, b):
@@ -39,36 +39,36 @@ def conductancias(malla, k, R_contacto):
 
 
 def paso_conduccion(malla, T, k, rho_cp, h_ext, T_horno, R_contacto, dt, adiabatico_z=True):
+    if not adiabatico_z:
+        raise NotImplementedError("Solo caras superior e inferior adiabáticas por ahora (spec §5.3)")
     m = malla
     Nr, Nz = T.shape
     G_r, G_z = conductancias(m, k, R_contacto)
-    if not adiabatico_z:
-        raise NotImplementedError("Solo caras superior e inferior adiabáticas por ahora (spec §5.3)")
     G_ext = m.A_r[-1] * m.dz_k * h_ext                     # (Nz,)
     C = rho_cp * m.V / dt                                  # (Nr, Nz)
 
-    idx = np.arange(Nr * Nz).reshape(Nr, Nz)
     diag = C.copy()
-    filas, cols, vals = [], [], []
-
-    def acoplar(a, b, G):
-        nonlocal diag
-        filas.extend([a.ravel(), b.ravel()])
-        cols.extend([b.ravel(), a.ravel()])
-        vals.extend([-G.ravel(), -G.ravel()])
-
-    acoplar(idx[:-1], idx[1:], G_r)
     diag[:-1] += G_r
     diag[1:] += G_r
-    acoplar(idx[:, :-1], idx[:, 1:], G_z)
     diag[:, :-1] += G_z
     diag[:, 1:] += G_z
     diag[-1] += G_ext
 
+    # Matriz de banda: fila u+i−j, columna j guarda A[i, j] (formato de solve_banded), u = l = Nz
+    N = Nr * Nz
+    ab = np.zeros((2 * Nz + 1, N))
+    ab[Nz] = diag.ravel()
+    acople_z = np.zeros((Nr, Nz))
+    acople_z[:, :-1] = -G_z                                # A[n, n+1] = A[n+1, n] para k → k+1
+    az = acople_z.ravel()[:-1]
+    ab[Nz - 1, 1:] = az                                    # superdiagonal 1
+    ab[Nz + 1, :-1] = az                                   # subdiagonal 1
+    ar = -G_r.ravel()                                      # A[n, n+Nz] = A[n+Nz, n] para i → i+1
+    ab[0, Nz:] = ar
+    ab[2 * Nz, :-Nz] = ar
+
     b = C * T
     b[-1] += G_ext * T_horno
-    filas.append(idx.ravel()); cols.append(idx.ravel()); vals.append(diag.ravel())
-    A = csc_matrix((np.concatenate(vals), (np.concatenate(filas), np.concatenate(cols))), shape=(Nr * Nz,) * 2)
-    T_nueva = spsolve(A, b.ravel()).reshape(Nr, Nz)
+    T_nueva = solve_banded((Nz, Nz), ab, b.ravel(), overwrite_ab=True, check_finite=False).reshape(Nr, Nz)
     Q = float(dt * np.sum(G_ext * (T_horno - T_nueva[-1])))
     return T_nueva, Q

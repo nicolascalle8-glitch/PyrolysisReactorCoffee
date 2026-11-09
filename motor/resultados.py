@@ -33,6 +33,8 @@ class Resultado:
     n_lecho: int = 0
     avisos: list = field(default_factory=list)
     pasos: int = 0
+    dT_max_paso: float = 0.0      # mayor ΔT aceptado en un paso (K)
+    pasos_en_dt_min: int = 0      # pasos aceptados en el piso de dt sin cumplir los límites
 
     @property
     def confiable(self) -> bool:
